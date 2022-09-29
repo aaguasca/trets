@@ -4,13 +4,18 @@
 from astropy.time import Time
 import astropy.units as u
 import ray
+import numpy as np
 from gammapy.data import Observations
 
 __all__=[
+    "aaa",
     "conditional_ray",
     "split_observations",
     "subrun_split"
 ]
+
+def aaa():
+    print("hola")
 
 def conditional_ray(attr):
     """

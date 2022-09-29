@@ -3,7 +3,11 @@
 
 import sys
 from ..utils import subrun_split
-
+from astropy.units import Quantity, Unit
+from astropy.table import Column,vstack, Table
+import numpy as np
+import matplotlib.pyplot as plt
+import copy
 from astropy.time import (
     Time
 )
@@ -21,9 +25,9 @@ from gammapy.estimators import (
     LightCurveEstimator,
 )
 
-__all__ = ['intrarun_lightcurve']
+__all__ = ['intrarun']
 
-def intrarun_lightcurve(interval_subrun,
+def intrarun(
                         E1,
                         E2,
                         e_reco,
@@ -31,7 +35,8 @@ def intrarun_lightcurve(interval_subrun,
                         on_region,
                         observations,
                         bkg_maker_reflected,
-                        best_fit_spec_model
+                        best_fit_spec_model,
+                        time_bin=None
 ):
 
     """
@@ -39,7 +44,7 @@ def intrarun_lightcurve(interval_subrun,
 
     parameters
     ----------
-    interval_subrun: astopy.Quantity
+    time_bin: astopy.Quantity
         The number of time we want the subruns to have.
     E1: astopy.Units
         Minimum energy bound used to compute the integral flux. It must be conside with one center
@@ -78,19 +83,26 @@ def intrarun_lightcurve(interval_subrun,
         containment_correction=False, selection=["counts", "exposure", "edisp"] # make this maps
     )       
 
-    time_interval_obs=[]
-    for run in range(len(observations)):
-        time_interval_obs.append(Time([observations[run].events.observation_time_start,
-                                    observations[run].events.observation_time_stop]))
-
-
-    time_intervals=subrun_split(interval_subrun, time_interval_obs)
-
-    #divide the runs into different subruns
-    short_observations = observations.select_time(time_intervals)
-
     # prepair again the Dataset
     datasets_short = Datasets()
+
+    if time_bin!=None:
+        time_interval_obs=[]
+        for run in range(len(observations)):
+            time_interval_obs.append(Time([observations[run].events.observation_time_start,
+                                        observations[run].events.observation_time_stop]))
+
+
+        time_intervals=subrun_split(time_bin, time_interval_obs)
+
+        #divide the runs into different subruns
+        short_observations = observations.select_time(time_intervals)
+    
+    else:
+        #only to match observations
+        short_observations = observations
+        time_intervals = observations.ids
+
 
     #loop for each run
     for obs_id, observation in zip(np.arange(len(time_intervals)), short_observations):
@@ -105,12 +117,20 @@ def intrarun_lightcurve(interval_subrun,
         dataset.models = best_fit_spec_model
 
     #build the estimator of the light curve with the assigned parameteres
-    lc_subrun=LightCurveEstimator(energy_edges=[E1, E2], 
-                           reoptimize=False, 
-                           selection_optional='all',
-                           n_sigma=1,
-                           n_sigma_ul=2,
-                           time_intervals=time_intervals)
+    if time_bin!=None:
+        lc_subrun=LightCurveEstimator(energy_edges=[E1, E2], 
+                               reoptimize=False, 
+                               selection_optional='all',
+                               n_sigma=1,
+                               n_sigma_ul=2,
+                               time_intervals=time_intervals)
+    else:
+        lc_subrun=LightCurveEstimator(energy_edges=[E1, E2],
+                               reoptimize=False,
+                               selection_optional='all',
+                               n_sigma=1,
+                               n_sigma_ul=2
+        )
 
     #run the estimator using all the data
     lc_subrun=lc_subrun.run(datasets_short)

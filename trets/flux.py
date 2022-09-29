@@ -4,8 +4,7 @@
 import time
 import ray
 from .utils import split_observations
-from .methods.intrarun_lc import intrarun_lightcurve
-from .methods.runwise_lc import runwise_lightcurve
+from .methods.fixed import intrarun
 from .methods.variable import TRETS
 import astropy.units as u
 from astropy.table import (
@@ -27,8 +26,8 @@ class lightcurve_methods:
     
     Three methods to obtain a light curve:
     - TRETS
-    - intrarun_lc
-    - runwise_lc
+    - intrarun
+    - runwise
     """
     
     def __init__(self,script_name, **kwargs):
@@ -65,20 +64,20 @@ class lightcurve_methods:
                 "parallelization"             #Boolean to use parallelization or not
                 }
             
-        if self.script_name=="intrarun_lc":
+        if self.script_name=="intrarun":
             allowed_keys = {
                 "e_inf_flux",                 #""
                 "e_sup_flux",                 #""
                 "e_reco",                     #""
                 "e_true",                     #""
-                "interval_subrun",            #The number of time we want the subruns to have.
+                "time_bin",                   #The number of time we want the subruns to have.
                 "on_region",                  #""
                 "observations",               #""
                 "bkg_maker_reflected",        #""
                 "sky_model"                   #""
                 }
             
-        if self.script_name=="runwise_lc":
+        if self.script_name=="runwise":
             allowed_keys = {
                 "e_inf_flux",                 #""
                 "e_sup_flux",                 #""
@@ -189,21 +188,21 @@ class lightcurve_methods:
 #                     light_curve=LightCurve(light_curve)
 #                 p.join()
     
-        if self.script_name=="intrarun_lc":
-            light_curve=intrarun_lightcurve(
+        if self.script_name=="intrarun":
+            light_curve=intrarun(
                                     E1=self.e_inf_flux,
                                     E2=self.e_sup_flux,
                                     e_reco=self.e_reco,
                                     e_true=self.e_true,
-                                    interval_subrun=self.interval_subrun,
+                                    time_bin=self.time_bin,
                                     on_region=self.on_region,
                                     observations=self.observations,
                                     bkg_maker_reflected=self.bkg_maker_reflected,
                                     best_fit_spec_model=self.sky_model 
             )
             
-        if self.script_name=="runwise_lc":
-            light_curve=runwise_lightcurve(
+        if self.script_name=="runwise":
+            light_curve=intrarun(
                                     E1=self.e_inf_flux,
                                     E2=self.e_sup_flux,
                                     e_reco=self.e_reco,
@@ -211,7 +210,7 @@ class lightcurve_methods:
                                     on_region=self.on_region,
                                     observations=self.observations,
                                     bkg_maker_reflected=self.bkg_maker_reflected,
-                                    best_fit_spec_model=self.sky_model
+                                    best_fit_spec_model=self.sky_model,
             )
     
         print("Duration: ",int(time.time()-t_start)*u.s,)
