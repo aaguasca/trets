@@ -6,6 +6,7 @@ import astropy.units as u
 import ray
 import numpy as np
 from gammapy.data import Observations
+import math
 
 __all__=[
     "get_intervals",
@@ -115,7 +116,7 @@ def split_observations(observations,threshold_time):
     return splitted_obs
 
 
-def subrun_split(interval_subrun, time_interval_obs):
+def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
     """
     Obtain the time intervals required to divide a run into subruns with a gti of interval_subrun,
     intervals in the extremes of the run account the extra or infratime of the run to obtain an
@@ -139,34 +140,70 @@ def subrun_split(interval_subrun, time_interval_obs):
     for time_run in time_interval_obs:
 
         intervals=[]
-        t0=time_run.mjd[0]
-        tf=time_run.mjd[-1]
+        t0=time_run.tt.mjd[0]
+        tf=time_run.tt.mjd[-1]
 
-        dt=tf-t0
-        sections=dt/interval_subrun.to_value("d")
+        dt=((tf-t0)*u.d).to_value("min")
+        sections=dt/interval_subrun.to_value("min")
 
-        #select the time that correspond to the end of the first subrun if we add half of the
-        #residual to this run
-        ti=t0+interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
-        #select the time that correspond to the end of the last subrun if we add half of the
-        #residual to this run
-        t_end=tf-interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
+        if sections<1:
+            time_intervals.append(Time([t0,tf],format="mjd",scale="tt"))
+        else:            
+            if round(sections)-round(sections,int(-math.log10(atol)))==0:
+                ti=t0+interval_subrun.to_value("d")
+                t_end=tf-interval_subrun.to_value("d")
+            else:
+                if np.modf(sections)[0]>0.6 or np.modf(sections)[0]<0.4 or sections<4:
+                    if np.modf(sections)[0]<0.4:
+                        ti=t0+interval_subrun.to_value("d")*(1+np.modf(sections)[0])
+                    else:
+                        ti=t0+interval_subrun.to_value("d")*(np.modf(sections)[0])
+                    if int(sections)==1:
+                        t_end=ti
+                    else:
+                        t_end=tf-interval_subrun.to_value("d")
+                else:
+                    #select the time that correspond to the end of the first subrun if we add half of the
+                    #residual to this run
+                    ti=t0+interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
+                    #select the time that correspond to the end of the last subrun if we add half of the
+                    #residual to this run
+                    t_end=tf-interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
+            
+            
+            #obtain the initial and final time of subruns with the same time interval as "interval_subrun"
+            if int(sections)==1:#for values 1<sections<2
+                interval=np.linspace(ti,t_end,1)
+            else:
+                if np.modf(sections)[0]>0.6 or np.modf(sections)[0]<0.4 or sections<4:
+                    if np.modf(sections)[0]<0.4:
+                        interval=np.linspace(ti,t_end,int(sections)-1)
+                    else:
+                        interval=np.linspace(ti,t_end,int(sections))
+                else:
+                    if round(sections)-round(sections,int(-math.log10(atol)))==0:
+                        interval=np.linspace(ti,t_end,int(sections))
+                    else:
+                        interval=np.linspace(ti,t_end,int(sections)-1)
 
-        #obtain the initial and final time of subruns with the same time interval as "interval_subrun"
-        interval=np.linspace(ti,t_end,int(sections)-1)
-        for i in range(len(interval)):
-            #replace the initial time of the first subrun to consider the resiudal
-            if i==0:
-                intervals.append(Time(t0,format='mjd',scale="utc"))
+        
+            if int(sections)==1 and np.modf(sections)[0]<0.4:
+                time_intervals.append(Time([t0,tf],format="mjd",scale="tt"))
+            else:
+                for i in range(len(interval)):
+                    #replace the initial time of the first subrun to consider the resiudal
+                    if i==0:
+                        intervals.append(Time(t0,format='mjd',scale="tt"))
 
-            intervals.append(Time(interval[i],format='mjd',scale="utc"))
-            #replace the final time of the first subrun to consider the resiudal        
-            if i==len(interval)-1:
-                intervals.append(Time(tf,format='mjd',scale="utc"))
+                    intervals.append(Time(interval[i],format='mjd',scale="tt"))
+                    #replace the final time of the first subrun to consider the resiudal        
+                    if i==len(interval)-1:
+                        intervals.append(Time(tf,format='mjd',scale="tt"))
 
 
-        time = [Time([tstart, tstop]) for tstart, tstop in zip(intervals[:-1], intervals[1:])]
+                time = [Time([tstart, tstop]) for tstart, tstop in zip(intervals[:-1], intervals[1:])]
 
-        for i in time:
-            time_intervals.append(i)
+                for i in time:
+                    time_intervals.append(i)
+
     return time_intervals

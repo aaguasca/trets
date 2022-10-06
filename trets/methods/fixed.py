@@ -88,14 +88,11 @@ def intrarun(
 
     if time_bin!=None:
         time_interval_obs=[]
-        print(observations.ids)
         for run in range(len(observations)):
             time_interval_obs.append(Time([observations[run].events.observation_time_start.tt.mjd,
                                         observations[run].events.observation_time_stop.tt.mjd],format="mjd",scale="tt"))
 
-
         time_intervals=subrun_split(time_bin, time_interval_obs)
-        print(time_intervals)
 
         #divide the runs into different subruns
         short_observations = observations.select_time(time_intervals)
