@@ -292,7 +292,7 @@ class TRETS:
                             datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
 
                             #estimate the light curve of the bin
-                            lc_f=lc.run(datasets_ONOFF)
+                            lc_f=lc.run(copy.deepcopy(datasets_ONOFF))
                             lc_f_table=lc_f.to_table(sed_type="flux", format="lightcurve")
 
                             #Consider this point as UL
@@ -328,7 +328,7 @@ class TRETS:
                     datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
 
                     #estimate the light curve of the bin
-                    lc_f=lc.run(datasets_ONOFF)
+                    lc_f=lc.run(copy.deepcopy(datasets_ONOFF))
                     lc_f_table=lc_f.to_table(sed_type="flux", format="lightcurve")
 
                     sqrt_ts_flux=lc_f_table["sqrt_ts"][0,0]
