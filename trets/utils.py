@@ -8,14 +8,42 @@ import numpy as np
 from gammapy.data import Observations
 
 __all__=[
-    "aaa",
+    "get_intervals",
     "conditional_ray",
     "split_observations",
     "subrun_split"
 ]
 
-def aaa():
-    print("hola")
+def get_intervals(data,n):
+    """
+    Return the values whose arg satisfies that it is a
+    multiple of n. The value in the last position is also
+    returned.
+    
+    Parameters
+    ----------
+    data: np.array
+        Array of interest
+    n: int
+        Integer value we want the arg to be multiple of.
+    Returns
+    -------
+    selected_data: np.array
+        Array that satisfies the condition.
+    """
+
+    if isinstance(data,np.ndarray):
+        if len(np.shape(data))!=1:
+            raise ValueError("data has more than one dimension")
+    else:
+        data=np.array(data)
+        if len(np.shape(data))!=1:
+            raise ValueError("data has more than one dimension")
+            
+    selected_data=data[::n]
+    if (len(data)-1)%n!=0:
+        selected_data=np.concatenate((selected_data,[data[-1]]))
+    return selected_data
 
 def conditional_ray(attr):
     """

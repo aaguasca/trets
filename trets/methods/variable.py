@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Licensed under a 3-clause BSD style license - see LICENSE
 
-from ..utils import conditional_ray
+from ..utils import conditional_ray, get_intervals
 from ..bayes import BayesianProbability
 from astropy.time import (
     Time
@@ -131,76 +131,55 @@ class TRETS:
         #dataset container where I keep the counts from previous observations
         prev_dataset = Datasets() 
         keep_dataset_bool=False
-        bool_last_event=False
+        bool_pass=False
         lc=LightCurveEstimator(energy_edges=[E1,E2], reoptimize=False, n_sigma=1,
                                selection_optional='all', atol=Quantity(1e-6,"s"))
 
         for i,obs in zip(observations.ids,observations):
 
             n_event=0
+            print( )
+            print( )
             print("OBSERVATION ID: %i. Total number of events: %i" %(obs.obs_id,len(obs.events.table)))
-            event_id=obs.events.table["EVENT_ID"]
+            print("OBS gti Tstart (TT):",observations[0].gti.time_start.tt.iso)
+            print("OBS gti Tstop (TT):",observations[0].gti.time_stop.tt.iso)
+            print("first event time (TT)",(observations[0].gti.time_ref.tt+\
+                                      Quantity(observations[0].events.table["TIME"][0], "second")).iso)
+            print("last event time (TT)", (observations[0].gti.time_ref.tt+\
+                                      Quantity(observations[0].events.table["TIME"][-1], "second")).iso)
+
+            event_id=obs.events.table["EVENT_ID"].data
+            event_time=obs.events.table["TIME"].data
             array_event_ID_sorted=np.sort(obs.events.table["EVENT_ID"].data)
 
 
-            while n_event<(len(event_id)-1): #loop that is repeated while we do not arrive to the last event
+            list_t=get_intervals(obs.events.table["TIME"].data,bin_event)
+            time_array=obs.gti.time_ref.tt+Quantity(list_t,"s")
+            arg_start_time=0
 
-                first_event=n_event
-                n_event=n_event+bin_event
 
-                #print("primer while",(len(event_id)-1)-n_event,bool_last_event)
 
-                if (len(event_id)-1)-n_event<0:#check if the last event in the bin exceed the max # of events in the run
-                    n_event=len(event_id)-1 #if so, use the last one
-                    bool_last_event=True
+            for cont_t in range(len(time_array)-1):
 
-                #parameters of the statistic 
-                n_off = 0 # counts in the off regions
-                n_on = 0 # counts in the on region
-                sqrt_ts_LiMa = 0 # square of the TS       
+                if bool_pass:
+                    pass
+                else:
+                    arg_start_time=cont_t
+                arg_stop_time=cont_t+1   
 
-                #filter: filter using the ID of the event (which is sorted by time). This is faster than
-                # subobs.select_time even replacing the GTI                
-                event_filter = {'type': 'custom', 'opts': dict(parameter='EVENT_ID',\
-                                band=(array_event_ID_sorted[first_event], array_event_ID_sorted[n_event]))}
-                filters=ObservationFilter(event_filters=[event_filter])
-
+                #filter the observation
+                filters=ObservationFilter(time_filter=Time([time_array[arg_start_time],time_array[arg_stop_time]]))
                 #copy the observation because the filter deletes all events out of the ID range specified
                 subobs=copy.deepcopy(obs)
                 #apply the filter
                 subobs.obs_filter = filters
 
-                #obtain the time at which the first and last event were recorded. 
-                #This is done bc the filtered obs still has the gti of the whole observation
-                    #obtain the position of the events in the table
-                arg_first_event=np.argwhere(obs.events.table["EVENT_ID"]\
-                                            ==array_event_ID_sorted[first_event])
-                arg_last_event=np.argwhere(obs.events.table["EVENT_ID"]==array_event_ID_sorted[n_event])
-
-                #obtain the time of the event (time in "s" wrt the ref. time)
-                t0=obs.events.table["TIME"][arg_first_event[0,0]]
-                tend=obs.events.table["TIME"][arg_last_event[0,0]]
-
-                #copy the gti object and replace the start and stop time. If not, the GIT of the dataset
-                #is not correct
-                new_gti=subobs.gti.copy()
-                new_gti.table["START"]=t0
-                new_gti.table["STOP"]=tend
-                subobs.__dict__["__gti_hdu"]=new_gti #replace the old gti for the new one
-                subobs.__dict__["_gti"]=subobs.__dict__["__gti_hdu"]# create a new parameter in the dict named "_git"
-                                                                    # this is done bc "__gti_hdu" parameter
-                                                                # search the git in a HDU file, but my new gti is not 
-                                                                    # in a HDU file, it is in the code itself
-                del subobs.__dict__["__gti_hdu"]#delete the parameter "__git_hdu"
-                if print_check==2:
-                    #obtain the time in mjd
-                    t_0=obs.gti.time_ref+Quantity(t0, "second")
-                    t_end=obs.gti.time_ref+Quantity(tend, "second")
+                t_0=time_array[arg_start_time]
+                t_end=time_array[arg_stop_time]          
 
                 #data reduction
                 dataset = dataset_maker.run(dataset_empty.copy(name=str(n_event)), subobs)
                 dataset_on_off = bkg_maker_reflected.run(dataset, subobs)
-
 
                 #we do not have data from previous runs
                 if len(prev_dataset)==0:
@@ -209,6 +188,9 @@ class TRETS:
                 else:
                     #create a temporal Dataset container with the dataset_on_off of the previous night
                     temp_dataset=prev_dataset.copy()
+                    print(len(temp_dataset))
+                    print("num events prev dataset:", Datasets(temp_dataset).stack_reduce().counts_off.data.sum()+Datasets(temp_dataset).stack_reduce().counts.data.sum())
+                    print("num events this dataset:", dataset_on_off.counts_off.data.sum()+dataset_on_off.counts.data.sum())
                     #append the new dataset_on_off 
                     temp_dataset.append(dataset_on_off)
                     #stack the observations          
@@ -226,11 +208,7 @@ class TRETS:
                 stat=WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
                 ts_bin=stat.ts
                 ts_sum=ts_bin
-
-                sign=np.sign(n_on-n_off*(acc_on/acc_off))
-                sqrt_ts_LiMa=sign*np.sqrt(ts_sum)
-
-
+                sqrt_ts_LiMa=np.sqrt(ts_sum)
                 #total TS obtained from the sum of the different bins (ts_sum is without considering bins)
                 stat_sum_3bins_dataset=datasets_ONOFF.stat_sum()
 
@@ -239,23 +217,26 @@ class TRETS:
                     #també es pot comprovat sumant el temps "s" de la taula amb gti de la dataset
                     print( )
                     print( )
+                    print(arg_start_time," to ",arg_stop_time,", total args:", len(time_array)-1)
                     print("OBSERVATION ID:", obs.obs_id)
-                    print(f"start time observation {i}, {obs.gti.time_start.iso}")
-                    print("arg in array_event_ID_sorted first event", arg_first_event[0,0])
-                    print("arg in array_event_ID_sorted last event",arg_last_event[0,0])
-                    print("time first event", Quantity(t0, "second"),"or", t_0.iso)
-                    print("-check gti start subobs-", subobs.gti.time_start.iso)
-                    print("time last event", Quantity(tend, "second"),"or", t_end.iso)
-                    print("-check gti end subobs-", subobs.gti.time_stop.iso)
-                    print("dataset_on_off gti Tstart:",dataset_on_off.gti.time_start.iso)
-                    print("dataset_on_off gti Tstop:",dataset_on_off.gti.time_stop.iso)
-                    print("datasets_ONOFF gti Tstart:",datasets_ONOFF.gti.time_start.iso)
-                    print("datasets_ONOFF gti Tstop:",datasets_ONOFF.gti.time_stop.iso)
-                    print("dataset gti Tstart:",dataset.gti.time_start.iso)
-                    print("dataset gti Tstop:",dataset.gti.time_stop.iso)                
-                    print("first event ID:",array_event_ID_sorted[first_event])
-                    print("last event ID:", array_event_ID_sorted[n_event])
+                    print(f"start time observation {i}, {obs.gti.time_start.tt.iso}")
+                    print(f"stop time observation {i}, {obs.gti.time_stop.tt.iso}")
+                    print("arg in array_event_ID_sorted first event", np.argwhere(event_time==list_t[arg_start_time])[0,0])
+                    print("arg in array_event_ID_sorted last event", np.argwhere(event_time==list_t[arg_stop_time])[0,0])
+                    print("time first event", t_0.tt.iso)
+                    print("-check gti start subobs-", subobs.gti.time_start.tt.iso)
+                    print("time last event", t_end.tt.iso)
+                    print("-check gti end subobs-", subobs.gti.time_stop.tt.iso)
+                    print("dataset_on_off gti Tstart:",dataset_on_off.gti.time_start.tt.iso)
+                    print("dataset_on_off gti Tstop:",dataset_on_off.gti.time_stop.tt.iso)
+                    print("datasets_ONOFF gti Tstart:",datasets_ONOFF.gti.time_start.tt.iso)
+                    print("datasets_ONOFF gti Tstop:",datasets_ONOFF.gti.time_stop.tt.iso)
+                    print("dataset gti Tstart:",dataset.gti.time_start.tt.iso)
+                    print("dataset gti Tstop:",dataset.gti.time_stop.tt.iso)                
+                    print("first event ID:",event_id[np.argwhere(event_time==list_t[arg_start_time])][0,0])
+                    print("last event ID:", event_id[np.argwhere(event_time==list_t[arg_stop_time])][0,0])
                     print("num events subobs:",len(subobs.events.table["EVENT_ID"]))
+                    print("num events dataset:", datasets_ONOFF.counts_off.data.sum()+datasets_ONOFF.counts.data.sum())
                     print("non, noff,        TS,             sqrt TS")
                     print(n_on,n_off,ts_sum,sqrt_ts_LiMa)
                     print("counts On region:",datasets_ONOFF.counts.data.reshape(-1))
@@ -263,39 +244,118 @@ class TRETS:
                     print("excess counts:",datasets_ONOFF.excess.data.reshape(-1))    
                     print("stat_sum TS bins", stat_sum_3bins_dataset)
 
-                while n_on<10 or n_off<10 or sqrt_ts_LiMa<sqrt_TS_LiMa_threshold:# loop until the bin satisfy these conditions
 
-                    #increase the number of events in the loop
-                    n_event=n_event+bin_event
+    #######################  NO passa el thd de sig ###################
+                if n_on<10 or n_off<10 or sqrt_ts_LiMa<sqrt_TS_LiMa_threshold:# loop until the bin satisfy these conditions
 
-                    # if the event in the end of the bin exceed the # of events in the run 
-                    if (len(event_id)-1)-n_event<0: 
+                    bool_pass=True
 
-                        #if we did not use until the last event, we now yes
-                        if bool_last_event==False:
-                            n_event=len(event_id)-1
-                            #print("last")
-                            bool_last_event=True
+                    if arg_stop_time==len(time_array)-1:
 
-                        #if we already have, end the loop
-                        else:
-                            bool_last_event=False
+                        # there is another observation in the observation container
+                        if np.argwhere(np.array(observations.ids)==i)[0,0]<len(observations)-1:
+
+                            # time between two observations lower than the threshold
+                            if (observations[int(np.argwhere(np.array(observations.ids)==i)[0,0]+1)].gti.time_start.tt - \
+                                obs.gti.time_stop.tt).to(thres_time_twoobs.unit) < thres_time_twoobs:
+
+                                save_dataset_on_off=dataset_on_off.copy(name="counts left obsid %s" %(i))
+                                #safe the dataset_on_off to keep it for the next observation loop
+                                prev_dataset.append(save_dataset_on_off)
+                                prev_events=len(subobs.events.table["EVENT_ID"])
+
+                                sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                                keep_dataset_bool=True
+
+                                if print_check==2:
+                                    print("+++++++++ Append dataset from obs %s in the dataset container +++++++++" %(i))
+
+
+                            else:# time between two observations higher than the threshold
+                                sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                                keep_dataset_bool=False
+
+                                #delete the memory of any dataset_on_off saved previously for the future run
+                                prev_dataset = Datasets()
+
+                        else:# is the last observation
+                            sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                            keep_dataset_bool=False      
+
+
+                        #compute UL
+                        #comupte flux upper limit when the next observaiton starts later than the threshold
+                        if keep_dataset_bool==False: 
+                            print("&&&&&&&&&&&&&&&&&&&&&&&&&")
+                            print("LAST TIME INTERVAL! n_on<10 or n_off<10 or sqrt_ts_LiMa<sqrt_TS_LiMa_threshold and NO keep_dataset_bool")
+                            print("&&&&&&&&&&&&&&&&&&&&&&&&&")
+                            datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
+
+                            #estimate the light curve of the bin
+                            lc_f=lc.run(datasets_ONOFF)
+                            lc_f_table=lc_f.to_table(sed_type="flux", format="lightcurve")
+
+                            #Consider this point as UL
+                            lc_f_table["is_ul"].data[0]=np.ones(shape=np.shape(lc_f_table["is_ul"].data[0]),dtype=bool)  
+
+                            lc_list.append(lc_f_table)
+
+                            if print_check==1 or print_check==2:
+                                print("---------------------------------------------------------------------------")
+                                print("events' bin: %.0f to %.0f.  sqrt(TS)_Li&Ma=%.1f -> UL!" %(np.argwhere(event_time==list_t[arg_start_time])[0,0],
+                                                                                                 np.argwhere(event_time==list_t[arg_stop_time])[0,0],
+                                                                                                 sqrt_ts_LiMa_ul))
+                                print("---------------------------------------------------------------------------")
+
+                            #!!!!!!!!CHECKS!!!!!!!!
+                            if print_check==2:
+                                print("time_min",Time(lc_f_table["time_min"][0],scale="tt",format="mjd").tt.iso)
+                                print("time_max",Time(lc_f_table["time_max"][0],scale="tt",format="mjd").tt.iso)
+                                print("dataset_on_off Tstart:",dataset_on_off.gti.time_start.tt.iso)
+                                print("dataset_on_off Tstop:",dataset_on_off.gti.time_stop.tt.iso)
+                                print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.tt.iso)
+                                print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.tt.iso)
+                                print("---------------------------------------------------------------------------")
+                            ts_array.append(ts_sum)
+                        if print_check == 1 or print_check == 2:
+                            print( )                    
+
+
+
+    ################## SI passa el thd de sig ####################
+                if n_off>10 and n_on>10 and sqrt_ts_LiMa>sqrt_TS_LiMa_threshold: #comupte flux
+
+                    datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
+
+                    #estimate the light curve of the bin
+                    lc_f=lc.run(datasets_ONOFF)
+                    lc_f_table=lc_f.to_table(sed_type="flux", format="lightcurve")
+
+                    sqrt_ts_flux=lc_f_table["sqrt_ts"][0,0]
+
+                    # CHECK SQRT TS OF THE FLUX IS HIGHER THAN THE THRESHOLD
+                    ######
+                    #if the flux point has a sqrt_TS>sqrt_TS_flux_UL_thd, we accept, if not, we keep adding events
+                    if sqrt_ts_flux<sqrt_TS_flux_UL_threshold:
+
+                        bool_pass=True
+
+                        if arg_stop_time==len(time_array)-1:
+                            bool_last_even=False
                             # there is another observation in the observation container
                             if np.argwhere(np.array(observations.ids)==i)[0,0]<len(observations)-1:
 
                                 # time between two observations lower than the threshold
-                                if (observations[int(np.argwhere(np.array(observations.ids)==i)[0,0]+1)].gti.time_start - \
-                                    obs.gti.time_stop).to(thres_time_twoobs.unit) < thres_time_twoobs:
+                                if (observations[int(np.argwhere(np.array(observations.ids)==i)[0,0]+1)].gti.time_start.tt - \
+                                    obs.gti.time_stop.tt).to(thres_time_twoobs.unit) < thres_time_twoobs:
 
                                     save_dataset_on_off=dataset_on_off.copy(name="counts left obsid %s" %(i))
                                     #safe the dataset_on_off to keep it for the next observation loop
                                     prev_dataset.append(save_dataset_on_off)
-                                    prev_events=n_event-bin_event-first_event
+                                    prev_events=len(subobs.events.table["EVENT_ID"])
 
-                                    n_on=99999 # the run and we do not satisfy the conditions we manually  
-                                    n_off=99999 # change them, and compute a flux upper limit
+                                    sqrt_ts_flux_ul=sqrt_ts_flux
                                     sqrt_ts_LiMa_ul=sqrt_ts_LiMa
-                                    sqrt_ts_LiMa=99999
                                     keep_dataset_bool=True
 
                                     if print_check==2:
@@ -303,330 +363,59 @@ class TRETS:
 
 
                                 else:# time between two observations higher than the threshold
-                                    n_on=99999 # the run and we do not satisfy the conditions we manually  
-                                    n_off=99999 # change them, and compute a flux upper limit
+                                    sqrt_ts_flux_ul=sqrt_ts_flux
                                     sqrt_ts_LiMa_ul=sqrt_ts_LiMa
-                                    sqrt_ts_LiMa=99999
                                     keep_dataset_bool=False
 
-                                    #delete the memory of any dataset_on_off saved (the prev. dataset is not used)
+                                    #delete the memory of any dataset_on_off saved previously for the future run
                                     prev_dataset = Datasets()
 
                             else:# is the last observation
-                                n_on=99999 # the run and we do not satisfy the conditions we manually  
-                                n_off=99999 # change them, and compute a flux upper limit
+                                sqrt_ts_flux_ul=sqrt_ts_flux
                                 sqrt_ts_LiMa_ul=sqrt_ts_LiMa
-                                sqrt_ts_LiMa=99999
                                 keep_dataset_bool=False
 
-                    else: # if the event in the end of the bin is equal or lower than the # of event in the run
-                        pass
 
-                    if (len(event_id)-1)-n_event>=0: 
+                            #compute flux UL
+                            if keep_dataset_bool==False:    
+                                print("&&&&&&&&&&&&&&&&&&&&&&&&&")
+                                print("LAST TIME INTERVAL! n_on>10, n_off>10, sqrt_ts_LiMa>sqrt_TS_LiMa_threshold but sqrt_ts_flux<sqrt_TS_flux_UL_threshold NO keep_dataset_bool")                            
+                                print("&&&&&&&&&&&&&&&&&&&&&&&&&")
 
-                        #print("segon while",(len(event_id)-1)-n_event,bool_last_event)
-                        #filter: filter using the ID of the event (which is sorted by time)
-                        event_filter = {'type': 'custom', 'opts': dict(parameter='EVENT_ID',\
-                                        band=(array_event_ID_sorted[first_event], array_event_ID_sorted[n_event]))}
+                                #consider this point as UL
+                                lc_f_table["is_ul"].data[0]=np.ones(shape=np.shape(lc_f_table["is_ul"].data[0]),dtype=bool)
 
-                        filters=ObservationFilter(event_filters=[event_filter])
+                                lc_list.append(lc_f_table)
 
+                                if print_check==1 or print_check==2:
+                                    print("---------------------------------------------------------------------------")
+                                    print("events' bin: %.0f to %.0f.  sqrt(TS)_Li&Ma=%.1f"+\
+                                          ", sqrt(TS)_flux=%.1f -> UL!" %(np.argwhere(event_time==list_t[arg_start_time])[0,0],
+                                                                          np.argwhere(event_time==list_t[arg_stop_time])[0,0],
+                                                                          sqrt_ts_LiMa_ul,sqrt_ts_flux_ul))
+                                    print("---------------------------------------------------------------------------")
 
-                        #copy the observation because the filter deletes all events out of the ID range specified
-                        subobs=copy.deepcopy(obs)
+                                #!!!!!!!!CHECKS!!!!!!!!
+                                if print_check==2:
+                                    print("time_min",Time(lc_f_table["time_min"][0],scale="tt",format="mjd").tt.iso)
+                                    print("time_max",Time(lc_f_table["time_max"][0],scale="tt",format="mjd").tt.iso)
+                                    print("dataset_on_off Tstart:",dataset_on_off.gti.time_start.tt.iso)
+                                    print("dataset_on_off Tstop:",dataset_on_off.gti.time_stop.tt.iso)
+                                    print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.tt.iso)
+                                    print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.tt.iso)
+                                    print("---------------------------------------------------------------------------")
+                                ts_array.append(ts_sum)                            
 
-                        #apply the filter
-                        subobs.obs_filter = filters
-
-                        #obtain the time at which the first and last event were recorded. This is done bc the filtered obs
-                        #still has the gti of the whole observation
-                        #obtain the position of the events in the table, first event
-                        arg_first_event=np.argwhere(obs.events.table["EVENT_ID"]\
-                                                    ==array_event_ID_sorted[first_event])
-                        #last event
-                        arg_last_event=np.argwhere(obs.events.table["EVENT_ID"]\
-                                                   ==array_event_ID_sorted[n_event])
-
-                        #obtain the time of the event (time in s wrt the ref. time)
-                        t0=obs.events.table["TIME"][arg_first_event[0,0]]
-                        tend=obs.events.table["TIME"][arg_last_event[0,0]]
-
-                        #copy the gti object and replace the start and stop time
-                        new_gti=subobs.gti.copy()
-                        new_gti.table["START"]=t0
-                        new_gti.table["STOP"]=tend
-                        subobs.__dict__["__gti_hdu"]=new_gti
-                        subobs.__dict__["_gti"]=subobs.__dict__["__gti_hdu"]# create a new parameter in the dict 
-                                                                # named "_git" this is done bc "__gti_hdu" parameter
-                                                                # search the git in a HDU file, but my new gti is not 
-                                                                    # in a HDU file, it is in the code itself
-                        del subobs.__dict__["__gti_hdu"]#delete the parameter "__git_hdu"
-
-                        if print_check==2:
-                            #obtain the time in mjd
-                            t_0=obs.gti.time_ref+Quantity(t0, "second")
-                            t_end=obs.gti.time_ref+Quantity(tend, "second")
-
-
-                        #data reduction
-                        dataset = dataset_maker.run(dataset_empty.copy(name=str(n_event)), subobs)
-                        dataset_on_off = bkg_maker_reflected.run(dataset, subobs)
-
-                        #we do not have data from previous runs
-                        if len(prev_dataset)==0:
-                            datasets_ONOFF=dataset_on_off
-                        #we have data to analyse from the previous runs
-                        else:
-                            #create a temporal Dataset container with the dataset_on_off of the previous night
-                            temp_dataset=prev_dataset.copy()
-                            #append the new dataset_on_off 
-                            temp_dataset.append(dataset_on_off)
-                            #stack the observations          
-                            datasets_ONOFF=Datasets(temp_dataset).stack_reduce()
-
-                        #compute acceptance in the On/Off region
-                        acc_off = datasets_ONOFF.acceptance_off.data.sum()
-                        acc_on = datasets_ONOFF.acceptance.data.sum()
-
-                        #compute the number of counts in the On/Off region
-                        n_on=datasets_ONOFF.counts.data.sum()
-                        n_off=datasets_ONOFF.counts_off.data.sum()
-
-                        #compute W statistics
-                        stat=WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
-                        ts_bin=stat.ts
-                        ts_sum=ts_bin
-                        sign=np.sign(n_on-n_off*(acc_on/acc_off))
-                        sqrt_ts_LiMa=sign*np.sqrt(ts_sum)
-                        #total TS obtained from the sum of the different bins (ts_sum is without considering bins)
-                        stat_sum_3bins_dataset=datasets_ONOFF.stat_sum()
-
-                        #!!!!!!!!CHECKS!!!!!!!!
-                        if print_check==2:
-                            #també es pot comprovat sumant el temps "s" de la taula amb gti de la dataset
-                            print( )
-                            print( )
-                            print("OBSERVATION ID:", obs.obs_id)
-                            print(f"start time observation obs_id {i}, {obs.gti.time_start.iso}")
-                            print("arg in array_event_ID_sorted first event", arg_first_event[0,0])
-                            print("arg in array_event_ID_sorted last event",arg_last_event[0,0])
-                            print("time first event", Quantity(t0, "second"),"or", t_0.iso)
-                            print("-check gti start subobs", subobs.gti.time_start.iso)
-                            print("time last event", Quantity(tend, "second"),"or", t_end.iso)
-                            print("-check gti end subobs", subobs.gti.time_stop.iso)
-                            print("dataset_on_off gti Tstart:",dataset_on_off.gti.time_start.iso)
-                            print("dataset_on_off gti Tstop:",dataset_on_off.gti.time_stop.iso)
-                            print("datasets_ONOFF gti Tstart:",datasets_ONOFF.gti.time_start.iso)
-                            print("datasets_ONOFF gti Tstop:",datasets_ONOFF.gti.time_stop.iso)
-                            print("dataset gti Tstart:",dataset.gti.time_start.iso)
-                            print("dataset gti Tstop:",dataset.gti.time_stop.iso)                
-                            print("first event ID:",array_event_ID_sorted[first_event])
-                            print("last event ID:", array_event_ID_sorted[n_event])
-                            print("num events subobs:",len(subobs.events.table["EVENT_ID"]))
-                            print("non, noff,       TS,            sqrt TS")
-                            print(n_on,n_off,ts_sum,sqrt_ts_LiMa)
-                            print("counts On region:",datasets_ONOFF.counts.data.reshape(-1))
-                            print("counts Off region:",datasets_ONOFF.background.data.reshape(-1))
-                            print("excess counts:",datasets_ONOFF.excess.data.reshape(-1)) 
-                            print("stat_sum TS bins", stat_sum_3bins_dataset)
-
-                if n_off!=99999 and n_on!=99999 and sqrt_ts_LiMa!=99999: #comupte flux
-
-                    datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
-
-                    #estimate the light curve of the bin
-                    lc_f=lc.run(copy.deepcopy(datasets_ONOFF))
-                    sqrt_ts_flux=lc_f.to_table(sed_type="flux", format="lightcurve")["sqrt_ts"][0,0]
-
-        # CHECK SQRT TS OF THE FLUX IS HIGHER THAN THE THRESHOLD
-        ######
-                    #if the flux point has a sqrt_TS>sqrt_TS_flux_UL_thd, we accept, if not, we keep adding events
-                    while sqrt_ts_flux<sqrt_TS_flux_UL_threshold or sqrt_ts_LiMa<sqrt_TS_LiMa_threshold:
-
-                        #increase the number of events in the loop
-                        n_event=n_event+bin_event
-
-                        # if the event in the end of the bin exceed the # of total events
-                        if (len(event_id)-1)-n_event<0: 
-
-                            #if we did not use until the last event, we now yes
-                            if bool_last_event==False:
-                                n_event=len(event_id)-1
-                                bool_last_event=True
-
-                            #if we already have, end the loop
-                            else:
-                                bool_last_event=False
-                                # there is another observation in the observation container
-                                if np.argwhere(np.array(observations.ids)==i)[0,0]<len(observations)-1:
-
-                                    # time between two observations lower than the threshold
-                                    if (observations[int(np.argwhere(np.array(observations.ids)==i)[0,0]+1)].gti.time_start - \
-                                        obs.gti.time_stop).to(thres_time_twoobs.unit) < thres_time_twoobs:
-
-                                        save_dataset_on_off=dataset_on_off.copy(name="counts left obsid %s" %(i))
-                                        #safe the dataset_on_off to keep it for the next observation loop
-                                        prev_dataset.append(save_dataset_on_off)
-                                        prev_events=n_event-bin_event-first_event
-
-                                        n_on=99999 # the run and we do not satisfy the conditions we manually  
-                                        n_off=99999 # change them, and compute a flux upper limit
-                                        sqrt_ts_flux_ul=sqrt_ts_flux
-                                        sqrt_ts_flux=99999
-                                        sqrt_ts_LiMa_ul=sqrt_ts_LiMa
-                                        sqrt_ts_LiMa=99999
-                                        keep_dataset_bool=True
-
-                                        if print_check==2:
-                                            print("+++++++++ Append dataset from obs %s in the dataset container +++++++++" %(i))
-
-
-                                    else:# time between two observations higher than the threshold
-                                        n_on=99999 # the run and we do not satisfy the conditions we manually  
-                                        n_off=99999 # change them, and compute a flux upper limit
-                                        sqrt_ts_flux_ul=sqrt_ts_flux
-                                        sqrt_ts_flux=99999
-                                        sqrt_ts_LiMa_ul=sqrt_ts_LiMa
-                                        sqrt_ts_LiMa=99999
-                                        keep_dataset_bool=False
-
-                                        #delete the memory of any dataset_on_off saved (the prev. dataset is not used)
-                                        prev_dataset = Datasets()
-
-                                else:# is the last observation
-                                    n_on=99999 # the run and we do not satisfy the conditions we manually  
-                                    n_off=99999 # change them, and compute a flux upper limit
-                                    sqrt_ts_flux_ul=sqrt_ts_flux
-                                    sqrt_ts_flux=99999
-                                    sqrt_ts_LiMa_ul=sqrt_ts_LiMa
-                                    sqrt_ts_LiMa=99999
-                                    keep_dataset_bool=False
-
-                        else: # if the event in the end of the bin is equal or lower than the # of event in the run
-                            pass
-
-                        if (len(event_id)-1)-n_event>=0: 
-                            #filter: filter using the ID of the event (which is sorted by time)
-                            event_filter = {'type': 'custom', 'opts': dict(parameter='EVENT_ID',\
-                                            band=(array_event_ID_sorted[first_event], array_event_ID_sorted[n_event]))}
-
-                            filters=ObservationFilter(event_filters=[event_filter])
-
-
-                            #copy the observation because the filter deletes all events out of the ID range specified
-                            subobs=copy.deepcopy(obs)
-
-                            #apply the filter
-                            subobs.obs_filter = filters
-
-                            #obtain the time at which the first and last event were recorded. This is done bc the filtered obs
-                            #still has the gti of the whole observation
-                            #obtain the position of the events in the table, first event
-                            arg_first_event=np.argwhere(obs.events.table["EVENT_ID"]\
-                                                        ==array_event_ID_sorted[first_event])
-                            #last event
-                            arg_last_event=np.argwhere(obs.events.table["EVENT_ID"]\
-                                                       ==array_event_ID_sorted[n_event])
-
-                            #obtain the time of the event (time in s wrt the ref. time)
-                            t0=obs.events.table["TIME"][arg_first_event[0,0]]
-                            tend=obs.events.table["TIME"][arg_last_event[0,0]]
-
-                            #copy the gti object and replace the start and stop time
-                            new_gti=subobs.gti.copy()
-                            new_gti.table["START"]=t0
-                            new_gti.table["STOP"]=tend
-                            subobs.__dict__["__gti_hdu"]=new_gti
-                            subobs.__dict__["_gti"]=subobs.__dict__["__gti_hdu"]# create a new parameter in the dict 
-                                                                    # named "_git" this is done bc "__gti_hdu" parameter
-                                                                    # search the git in a HDU file, but my new gti is not 
-                                                                        # in a HDU file, it is in the code itself
-                            del subobs.__dict__["__gti_hdu"]#delete the parameter "__git_hdu"
-
-                            if print_check==2:
-                                #obtain the time in mjd
-                                t_0=obs.gti.time_ref+Quantity(t0, "second")
-                                t_end=obs.gti.time_ref+Quantity(tend, "second")
-
-                            #data reduction
-                            dataset = dataset_maker.run(dataset_empty.copy(name=str(n_event)), subobs)
-                            dataset_on_off = bkg_maker_reflected.run(dataset, subobs)
-
-                            #we do not have data from previous runs
-                            if len(prev_dataset)==0:
-                                datasets_ONOFF=dataset_on_off
-                            #we have data to analyse from the previous runs
-                            else:
-                                #create a temp Dataset container with the dataset_on_off of the previous night
-                                temp_dataset=prev_dataset.copy()
-                                #append the new dataset_on_off 
-                                temp_dataset.append(dataset_on_off)
-                                #stack the observations          
-                                datasets_ONOFF=Datasets(temp_dataset).stack_reduce()
-
-                            #compute acceptance in the On/Off region
-                            acc_off = datasets_ONOFF.acceptance_off.data.sum()
-                            acc_on = datasets_ONOFF.acceptance.data.sum()
-
-                            #compute the number of counts in the On/Off region
-                            n_on=datasets_ONOFF.counts.data.sum()
-                            n_off=datasets_ONOFF.counts_off.data.sum()
-
-                            #compute W statistics
-                            stat=WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
-                            ts_bin=stat.ts
-                            ts_sum=ts_bin
-                            sqrt_ts_LiMa=np.sqrt(ts_sum)
-
-                            #total TS obtained from the sum of the different bins (ts_sum is without considering bins)
-                            stat_sum_3bins_dataset=datasets_ONOFF.stat_sum()
-
-                            #estimate the light curve of the bin
-                            datasets_ONOFF.models=best_fit_spec_model
-                            lc_f=lc.run(datasets_ONOFF) 
-                            sqrt_ts_flux=lc_f.to_table(sed_type="flux", format="lightcurve")["sqrt_ts"][0,0]
-
-                            #!!!!!!!!CHECKS!!!!!!!!
-                            if print_check==2:
-                                #també es pot comprovat sumant el temps "s" de la taula amb gti de la dataset
-                                print( )
-                                print( )
-                                print("OBSERVATION ID:", obs.obs_id)
-                                print(f"start time observation obs_id {i}, {obs.gti.time_start.iso}")
-                                print("arg in array_event_ID_sorted first event", arg_first_event[0,0])
-                                print("arg in array_event_ID_sorted last event",arg_last_event[0,0])
-                                print("time first event", Quantity(t0, "second"),"or", t_0.iso)
-                                print("-check gti start subobs", subobs.gti.time_start.iso)
-                                print("time last event", Quantity(tend, "second"),"or", t_end.iso)
-                                print("-check gti end subobs", subobs.gti.time_stop.iso)
-                                print("dataset_on_off gti Tstart:",dataset_on_off.gti.time_start.iso)
-                                print("dataset_on_off gti Tstop:",dataset_on_off.gti.time_stop.iso)
-                                print("datasets_ONOFF gti Tstart:",datasets_ONOFF.gti.time_start.iso)
-                                print("datasets_ONOFF gti Tstop:",datasets_ONOFF.gti.time_stop.iso)
-                                print("dataset gti Tstart:",dataset.gti.time_start.iso)
-                                print("dataset gti Tstop:",dataset.gti.time_stop.iso)                
-                                print("first event ID:",array_event_ID_sorted[first_event])
-                                print("last event ID:", array_event_ID_sorted[n_event])
-                                print("num events subobs:",len(subobs.events.table["EVENT_ID"]))
-                                print("non, noff,       TS,            sqrt TS")
-                                print(n_on,n_off,ts_sum,sqrt_ts_LiMa)
-                                print("counts On region:",datasets_ONOFF.counts.data.reshape(-1))
-                                print("counts Off region:",datasets_ONOFF.background.data.reshape(-1))
-                                print("excess counts:",datasets_ONOFF.excess.data.reshape(-1))
-                                print("stat_sum TS bins", stat_sum_3bins_dataset)
-                                print("TS of the flux point:",sqrt_ts_flux)
 
                     #we safe the flux point
-                    if n_off!=99999 and n_on!=99999 and sqrt_ts_LiMa!=99999 and sqrt_ts_flux!=99999:
-                        #use the same format as the TS column, not an upper limit
-                        lc_f.to_table(sed_type="flux", format="lightcurve")["is_ul"] = Column(lc_f.to_table(sed_type="flux", format="lightcurve")["ts"]*0, dtype=bool)
+                    else:
+                        bool_pass=False
+                        print("&&&&&&&&&&&&&&&&&&&&&&&&&")
+                        print("LAST TIME INTERVAL! n_on>10, n_off>10, sqrt_ts_LiMa>sqrt_TS_LiMa_threshold, sqrt_ts_flux>sqrt_TS_flux_UL_threshold")
+                        print("&&&&&&&&&&&&&&&&&&&&&&&&&")
 
-                        #hi ha un problema amb el atol de la classe. Poso maualment l'interval de temps (no se si aquest
-                        #error amb l'interval de temps afecta al flux... comprovar-ho)
-                        lc_f.to_table(sed_type="flux", format="lightcurve")["time_min"]=datasets_ONOFF.gti.time_intervals[0][0].mjd#time start
-                        #time end (-1 en l'arg pel cas que hi hagi més d'un time interval 
-                        #(when we have the gti from the previous safed obs))
-                        lc_f.to_table(sed_type="flux", format="lightcurve")["time_max"]=datasets_ONOFF.gti.time_intervals[-1][1].mjd
+                        #not an upper limit
+                        lc_f_table["is_ul"].data[0]=np.zeros(shape=np.shape(lc_f_table["is_ul"].data[0]),dtype=bool)
 
                         lc_list.append(lc_f.to_table(sed_type="flux", format="lightcurve"))
 
@@ -634,107 +423,36 @@ class TRETS:
                             keep_dataset_bool=False
                             #as we have succesfully calculed the flux, delete the previous counts of the dataset container
                             prev_dataset = Datasets()
-                            if print_check==1:
+                            if print_check==1 or print_check==2:
                                 print("---------------------------------------------------------------------------")
                                 print("events' bin: %i to %i with %i events from previous obs. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f" \
                                                   %(first_event,n_event,prev_events,sqrt_ts_LiMa,sqrt_ts_flux))
 
                         else:
-                            if print_check==1:
+                            if print_check==1 or print_check==2:
                                 print("---------------------------------------------------------------------------")                            
-                                print("events' bin: %.0f to %.0f. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f" %(first_event,n_event,sqrt_ts_LiMa,sqrt_ts_flux))
+                                print("events' bin: %.0f to %.0f. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f" %(np.argwhere(event_time==list_t[arg_start_time])[0,0],
+                                                                                                             np.argwhere(event_time==list_t[arg_stop_time])[0,0],
+                                                                                                             sqrt_ts_LiMa,sqrt_ts_flux))
                         #!!!!!!!!CHECKS!!!!!!!!
                         if print_check==2:
                             print("---------------------------------------------------------------------------")
-                            print("time_min",Time(lc_f.to_table(sed_type="flux", format="lightcurve")["time_min"][0],format="mjd").iso)
-                            print("time_max",Time(lc_f.to_table(sed_type="flux", format="lightcurve")["time_max"][0],format="mjd").iso)
-                            print("dataset_on_off Tstart:",dataset_on_off.gti.time_start.iso)
-                            print("dataset_on_off Tstop:",dataset_on_off.gti.time_stop.iso)
-                            print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.iso)
-                            print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.iso)
-                            print("---------------------------------------------------------------------------")
-                        ts_array.append(ts_sum)
-
-                    #comupte flux upper limit when the next observation starts later than the threshold
-                    #and we could not reached high value fo
-                    elif n_off==99999 and n_on==99999 and sqrt_ts_LiMa==99999 and sqrt_ts_flux==99999 and keep_dataset_bool==False: 
-                        datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
-
-                        #use the same format as the TS column, consider this point as UL
-                        lc_f.to_table(sed_type="flux", format="lightcurve")["is_ul"] = Column(lc_f.to_table(sed_type="flux", format="lightcurve")["ts"]*1, dtype=bool)
-
-                        #hi ha un problema amb el atol de la classe. Poso maualment l'interval de temps (no se si aquest
-                        #error amb l'interval de temps afecta al flux... comprovar-ho)
-                        lc_f.to_table(sed_type="flux", format="lightcurve")["time_min"]=datasets_ONOFF.gti.time_intervals[0][0].mjd#time start
-                        #time end (-1 en l'arg pel cas que hi hagi més d'un time interval 
-                        #(when we have the gti from the previous safed obs))
-                        lc_f.to_table(sed_type="flux", format="lightcurve")["time_max"]=datasets_ONOFF.gti.time_intervals[-1][1].mjd
-
-                        lc_list.append(lc_f.to_table(sed_type="flux", format="lightcurve"))
-
-                        if print_check==1:
-                            print("---------------------------------------------------------------------------")
-                            print("events' bin: %.0f to %.0f.  sqrt(TS)_Li&Ma=%.1f"+\
-                                  ", sqrt(TS)_flux=%.1f -> UL!" %(first_event,n_event,sqrt_ts_LiMa_ul,sqrt_ts_flux_ul))
-                            print("---------------------------------------------------------------------------")
-
-                        #!!!!!!!!CHECKS!!!!!!!!
-                        if print_check==2:
-                            print("time_min",Time(lc_f.to_table(sed_type="flux", format="lightcurve")["time_min"][0],format="mjd").iso)
-                            print("time_max",Time(lc_f.to_table(sed_type="flux", format="lightcurve")["time_max"][0],format="mjd").iso)
-                            print("dataset_on_off Tstart:",dataset_on_off.gti.time_start.iso)
-                            print("dataset_on_off Tstop:",dataset_on_off.gti.time_stop.iso)
-                            print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.iso)
-                            print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.iso)
+                            print("time_min",Time(lc_f_table["time_min"][0],scale="tt",format="mjd").tt.iso)
+                            print("time_max",Time(lc_f_table["time_max"][0],scale="tt",format="mjd").tt.iso)
+                            print("dataset_on_off Tstart:",dataset_on_off.gti.time_start.tt.iso)
+                            print("dataset_on_off Tstop:",dataset_on_off.gti.time_stop.tt.iso)
+                            print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.tt.iso)
+                            print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.tt.iso)
                             print("---------------------------------------------------------------------------")
                         ts_array.append(ts_sum)
 
 
-                #comupte flux upper limit when the next observaiton starts later than the threshold
-                elif n_off==99999 and n_on==99999 and sqrt_ts_LiMa==99999 and keep_dataset_bool==False: 
-
-                    datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
-
-                    #estimate the light curve of the bin
-                    lc_f=lc.run(copy.deepcopy(datasets_ONOFF))
-
-                    #use the same format as the TS column, consider this point as UL
-                    lc_f.to_table(sed_type="flux", format="lightcurve")["is_ul"] = Column(lc_f.to_table(sed_type="flux", format="lightcurve")["ts"]*1, dtype=bool)
-
-                    #hi ha un problema amb el atol de la classe. Poso maualment l'interval de temps (no se si aquest
-                    #error amb l'interval de temps afecta al flux... comprovar-ho)
-                    lc_f.to_table(sed_type="flux", format="lightcurve")["time_min"]=datasets_ONOFF.gti.time_intervals[0][0].mjd#time start
-                    #time end (-1 en l'arg pel cas que hi hagi més d'un time interval 
-                    #(when we have the gti from the previous safed obs))
-                    lc_f.to_table(sed_type="flux", format="lightcurve")["time_max"]=datasets_ONOFF.gti.time_intervals[-1][1].mjd
-
-                    lc_list.append(lc_f.to_table(sed_type="flux", format="lightcurve"))
-
-                    if print_check==1:
-                        print("---------------------------------------------------------------------------")
-                        print("events' bin: %.0f to %.0f.  sqrt(TS)_Li&Ma=%.1f -> UL!" %(first_event,n_event,sqrt_ts_LiMa_ul))
-                        print("---------------------------------------------------------------------------")
-
-                    #!!!!!!!!CHECKS!!!!!!!!
-                    if print_check==2:
-                        print("time_min",Time(lc_f.to_table(sed_type="flux", format="lightcurve")["time_min"][0],format="mjd").iso)
-                        print("time_max",Time(lc_f.to_table(sed_type="flux", format="lightcurve")["time_max"][0],format="mjd").iso)
-                        print("dataset_on_off Tstart:",dataset_on_off.gti.time_start.iso)
-                        print("dataset_on_off Tstop:",dataset_on_off.gti.time_stop.iso)
-                        print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.iso)
-                        print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.iso)
-                        print("---------------------------------------------------------------------------")
-                    ts_array.append(ts_sum)
-
-            if print_check == 1 or print_check == 2:
-                print( )
 
         #stack al the flux point tables into a single table  
         light_curve=vstack(lc_list)
 
         #add the Li&Ma TS detection value
         TS_column=Table(data=[ts_array], names=["Li&Ma_TS_detection"], dtype=[np.float32])
-    #         light_curve=hstack([light_curve,TS_column])
         light_curve.meta.update({"TS-thd":sqrt_TS_LiMa_threshold**2})
         return light_curve.copy(),TS_column.copy()
 
