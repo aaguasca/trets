@@ -51,19 +51,20 @@ class TRETS:
               e_reco,
               e_true,
               on_region,
-              sqrt_TS_LiMa_threshold,
+              sig_threshold,
               sqrt_TS_flux_UL_threshold,
               print_check,
               thres_time_twoobs,
               bin_event,
               observations,
               bkg_maker_reflected,
-              best_fit_spec_model
+              best_fit_spec_model,
+              bool_bayesian=True
     ):  
         """
         TRETS algorithm. Computes the light curve between energies [E1,E2] where in each integral flux, 
         the number of events in that time interval gives a detection significance of the source of 
-        TS="sqrt_TS_LiMa_threshold"**2 and the fit statistics is higher than "sqrt_TS_flux_UL_threshold". 
+        TS="sig_threshold"**2 and the fit statistics is higher than "sqrt_TS_flux_UL_threshold". 
         The flux point is computed assuming a certain Skymodel "best_fit_spec_model" (spectral model).
     
         parameters
@@ -81,8 +82,8 @@ class TRETS:
         on_region:
             On region located in the source position, it must has the same size used in the IRFs.
 
-        sqrt_TS_LiMa_threshold:
-            Li & Ma significance threshold used to compute a integral flux.
+        sig_threshold:
+            Significance threshold used to compute a integral flux.
         sqrt_TS_flux_UL_threshold:
             Fit significance threshold to save the integral flux as a flux point.
         print_check: integer
@@ -102,6 +103,8 @@ class TRETS:
             Background maker to estimate the background.
         best_fit_spec_model:
             Assumed Skymodel of the source. Only spectral model.
+        bool_bayesian: boolean
+            If true, use bayesian approach to compute the detection significance
 
         return
         ------
@@ -115,11 +118,11 @@ class TRETS:
     
         geom=RegionGeom.create(region=on_region, axes=[e_reco])
 
-        dataset_empty = SpectrumDataset.create( # create the dataset container object for the likelihood fitting of the spectrum on the ON region
+        dataset_empty = SpectrumDataset.create(
             geom, energy_axis_true=e_true
         )
-        dataset_maker = SpectrumDatasetMaker( #maker to produce data reduction in order to obtain spectrum
-            containment_correction=False, selection=["counts", "exposure", "edisp"] # make this maps
+        dataset_maker = SpectrumDatasetMaker(
+            containment_correction=False, selection=["counts", "exposure", "edisp"]
         )        
 
         print("Run IDs considered in this execution: ",observations.ids)
@@ -127,25 +130,26 @@ class TRETS:
         #list where the the flux is saved
         lc_list=[]
         # array to store TS for each time interval
-        ts_array=[]
+        sig_array=[]
         #dataset container where I keep the counts from previous observations
         prev_dataset = Datasets() 
         keep_dataset_bool=False
         bool_pass=False
         lc=LightCurveEstimator(energy_edges=[E1,E2], reoptimize=False, n_sigma=1,
-                               selection_optional='all', atol=Quantity(1e-6,"s"))
+                               n_sigma_ul=2,selection_optional='all', atol=Quantity(1e-6,"s"))
 
         for i,obs in zip(observations.ids,observations):
-
+     
             n_event=0
-            print( )
-            print( )
-            print("OBSERVATION ID: %i. Total number of events: %i" %(obs.obs_id,len(obs.events.table)))
-            print("OBS gti Tstart (TT):",observations[0].gti.time_start.tt.iso)
-            print("OBS gti Tstop (TT):",observations[0].gti.time_stop.tt.iso)
-            print("first event time (TT)",(observations[0].gti.time_ref.tt+\
+            if print_check!=0:
+                print( )
+                print( )
+                print("OBSERVATION ID: %i. Total number of events: %i" %(obs.obs_id,len(obs.events.table)))
+                print("OBS gti Tstart (TT):",observations[0].gti.time_start.tt.iso)
+                print("OBS gti Tstop (TT):",observations[0].gti.time_stop.tt.iso)
+                print("first event time (TT)",(observations[0].gti.time_ref.tt+\
                                       Quantity(observations[0].events.table["TIME"][0], "second")).iso)
-            print("last event time (TT)", (observations[0].gti.time_ref.tt+\
+                print("last event time (TT)", (observations[0].gti.time_ref.tt+\
                                       Quantity(observations[0].events.table["TIME"][-1], "second")).iso)
 
             event_id=obs.events.table["EVENT_ID"].data
@@ -157,8 +161,6 @@ class TRETS:
             time_array=obs.gti.time_ref.tt+Quantity(list_t,"s")
             arg_start_time=0
 
-
-
             for cont_t in range(len(time_array)-1):
 
                 if bool_pass:
@@ -169,6 +171,7 @@ class TRETS:
 
                 #filter the observation
                 filters=ObservationFilter(time_filter=Time([time_array[arg_start_time],time_array[arg_stop_time]]))
+                
                 #copy the observation because the filter deletes all events out of the ID range specified
                 subobs=copy.deepcopy(obs)
                 #apply the filter
@@ -188,9 +191,14 @@ class TRETS:
                 else:
                     #create a temporal Dataset container with the dataset_on_off of the previous night
                     temp_dataset=prev_dataset.copy()
-                    print(len(temp_dataset))
-                    print("num events prev dataset:", Datasets(temp_dataset).stack_reduce().counts_off.data.sum()+Datasets(temp_dataset).stack_reduce().counts.data.sum())
-                    print("num events this dataset:", dataset_on_off.counts_off.data.sum()+dataset_on_off.counts.data.sum())
+                    
+                    if print_check!=0:
+                        print(len(temp_dataset))
+                        print("num events prev dataset:", 
+                            Datasets(temp_dataset).stack_reduce().counts_off.data.sum()+Datasets(temp_dataset).stack_reduce().counts.data.sum())
+                        print("num events this dataset:", 
+                            dataset_on_off.counts_off.data.sum()+dataset_on_off.counts.data.sum())
+                    
                     #append the new dataset_on_off 
                     temp_dataset.append(dataset_on_off)
                     #stack the observations          
@@ -204,13 +212,33 @@ class TRETS:
                 n_on=datasets_ONOFF.counts.data.sum()
                 n_off=datasets_ONOFF.counts_off.data.sum()
 
-                #compute W statistics
-                stat=WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
-                ts_bin=stat.ts
-                ts_sum=ts_bin
-                sqrt_ts_LiMa=np.sqrt(ts_sum)
-                #total TS obtained from the sum of the different bins (ts_sum is without considering bins)
-                stat_sum_3bins_dataset=datasets_ONOFF.stat_sum()
+                if bool_bayesian:
+                    n_on_thd=0
+                    n_off_thd=0
+
+                    if n_on+n_off>400:
+                        #compute W statistics
+                        stat=WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
+                        sig=stat.sqrt_ts
+                        #total TS obtained from the sum of the different bins
+                        stat_sum_3bins_dataset=datasets_ONOFF.stat_sum()
+                    else:
+                        #bayesian inference
+                        bayes=BayesianProbability(
+                                        n_on=n_on,
+                                        n_off=n_off,
+                                        alpha=acc_on/acc_off
+                        )
+                        sig=bayes.detection_significance()
+                else:
+                    n_on_thd=10
+                    n_off_thd=10
+                    
+                    #compute W statistics
+                    stat=WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
+                    sig=stat.sqrt_ts
+                    #total TS obtained from the sum of the different bins
+                    stat_sum_3bins_dataset=datasets_ONOFF.stat_sum()
 
                 #!!!!!!!!CHECKS!!!!!!!!
                 if print_check==2:
@@ -221,8 +249,10 @@ class TRETS:
                     print("OBSERVATION ID:", obs.obs_id)
                     print(f"start time observation {i}, {obs.gti.time_start.tt.iso}")
                     print(f"stop time observation {i}, {obs.gti.time_stop.tt.iso}")
-                    print("arg in array_event_ID_sorted first event", np.argwhere(event_time==list_t[arg_start_time])[0,0])
-                    print("arg in array_event_ID_sorted last event", np.argwhere(event_time==list_t[arg_stop_time])[0,0])
+                    print("arg in array_event_ID_sorted first event", 
+                            np.argwhere(event_time==list_t[arg_start_time])[0,0])
+                    print("arg in array_event_ID_sorted last event", 
+                            np.argwhere(event_time==list_t[arg_stop_time])[0,0])
                     print("time first event", t_0.tt.iso)
                     print("-check gti start subobs-", subobs.gti.time_start.tt.iso)
                     print("time last event", t_end.tt.iso)
@@ -236,9 +266,10 @@ class TRETS:
                     print("first event ID:",event_id[np.argwhere(event_time==list_t[arg_start_time])][0,0])
                     print("last event ID:", event_id[np.argwhere(event_time==list_t[arg_stop_time])][0,0])
                     print("num events subobs:",len(subobs.events.table["EVENT_ID"]))
-                    print("num events dataset:", datasets_ONOFF.counts_off.data.sum()+datasets_ONOFF.counts.data.sum())
-                    print("non, noff,        TS,             sqrt TS")
-                    print(n_on,n_off,ts_sum,sqrt_ts_LiMa)
+                    print("num events dataset:", 
+                            datasets_ONOFF.counts_off.data.sum()+datasets_ONOFF.counts.data.sum())
+                    print("non, noff,             sig")
+                    print(n_on,n_off,sig)
                     print("counts On region:",datasets_ONOFF.counts.data.reshape(-1))
                     print("counts Off region:",datasets_ONOFF.background.data.reshape(-1))
                     print("excess counts:",datasets_ONOFF.excess.data.reshape(-1))    
@@ -246,7 +277,7 @@ class TRETS:
 
 
     #######################  NO passa el thd de sig ###################
-                if n_on<10 or n_off<10 or sqrt_ts_LiMa<sqrt_TS_LiMa_threshold:# loop until the bin satisfy these conditions
+                if n_on<n_on_thd or n_off<n_off_thd or sig<sig_threshold:# loop until the bin satisfy these conditions
 
                     bool_pass=True
 
@@ -264,7 +295,7 @@ class TRETS:
                                 prev_dataset.append(save_dataset_on_off)
                                 prev_events=len(subobs.events.table["EVENT_ID"])
 
-                                sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                                sig_ul=sig
                                 keep_dataset_bool=True
 
                                 if print_check==2:
@@ -272,23 +303,21 @@ class TRETS:
 
 
                             else:# time between two observations higher than the threshold
-                                sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                                sig_ul=sig
                                 keep_dataset_bool=False
 
                                 #delete the memory of any dataset_on_off saved previously for the future run
                                 prev_dataset = Datasets()
 
                         else:# is the last observation
-                            sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                            sig_ul=sig
                             keep_dataset_bool=False      
 
 
                         #compute UL
                         #comupte flux upper limit when the next observaiton starts later than the threshold
                         if keep_dataset_bool==False: 
-                            print("&&&&&&&&&&&&&&&&&&&&&&&&&")
-                            print("LAST TIME INTERVAL! n_on<10 or n_off<10 or sqrt_ts_LiMa<sqrt_TS_LiMa_threshold and NO keep_dataset_bool")
-                            print("&&&&&&&&&&&&&&&&&&&&&&&&&")
+
                             datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
 
                             #estimate the light curve of the bin
@@ -304,7 +333,7 @@ class TRETS:
                                 print("---------------------------------------------------------------------------")
                                 print("events' bin: %.0f to %.0f.  sqrt(TS)_Li&Ma=%.1f -> UL!" %(np.argwhere(event_time==list_t[arg_start_time])[0,0],
                                                                                                  np.argwhere(event_time==list_t[arg_stop_time])[0,0],
-                                                                                                 sqrt_ts_LiMa_ul))
+                                                                                                 sig_ul))
                                 print("---------------------------------------------------------------------------")
 
                             #!!!!!!!!CHECKS!!!!!!!!
@@ -316,14 +345,14 @@ class TRETS:
                                 print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.tt.iso)
                                 print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.tt.iso)
                                 print("---------------------------------------------------------------------------")
-                            ts_array.append(ts_sum)
+                            sig_array.append(sig)
                         if print_check == 1 or print_check == 2:
                             print( )                    
 
 
 
     ################## SI passa el thd de sig ####################
-                if n_off>10 and n_on>10 and sqrt_ts_LiMa>sqrt_TS_LiMa_threshold: #comupte flux
+                if n_off>n_off_thd and n_on>n_on_thd and sig>sig_threshold: #comupte flux
 
                     datasets_ONOFF.models=best_fit_spec_model#set the model we use to estimate the light curve
 
@@ -355,7 +384,7 @@ class TRETS:
                                     prev_events=len(subobs.events.table["EVENT_ID"])
 
                                     sqrt_ts_flux_ul=sqrt_ts_flux
-                                    sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                                    sig_ul=sig
                                     keep_dataset_bool=True
 
                                     if print_check==2:
@@ -364,7 +393,7 @@ class TRETS:
 
                                 else:# time between two observations higher than the threshold
                                     sqrt_ts_flux_ul=sqrt_ts_flux
-                                    sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                                    sig_ul=sig
                                     keep_dataset_bool=False
 
                                     #delete the memory of any dataset_on_off saved previously for the future run
@@ -372,15 +401,12 @@ class TRETS:
 
                             else:# is the last observation
                                 sqrt_ts_flux_ul=sqrt_ts_flux
-                                sqrt_ts_LiMa_ul=sqrt_ts_LiMa
+                                sig_ul=sig
                                 keep_dataset_bool=False
 
 
                             #compute flux UL
                             if keep_dataset_bool==False:    
-                                print("&&&&&&&&&&&&&&&&&&&&&&&&&")
-                                print("LAST TIME INTERVAL! n_on>10, n_off>10, sqrt_ts_LiMa>sqrt_TS_LiMa_threshold but sqrt_ts_flux<sqrt_TS_flux_UL_threshold NO keep_dataset_bool")                            
-                                print("&&&&&&&&&&&&&&&&&&&&&&&&&")
 
                                 #consider this point as UL
                                 lc_f_table["is_ul"].data[0]=np.ones(shape=np.shape(lc_f_table["is_ul"].data[0]),dtype=bool)
@@ -392,7 +418,7 @@ class TRETS:
                                     print("events' bin: %.0f to %.0f.  sqrt(TS)_Li&Ma=%.1f"+\
                                           ", sqrt(TS)_flux=%.1f -> UL!" %(np.argwhere(event_time==list_t[arg_start_time])[0,0],
                                                                           np.argwhere(event_time==list_t[arg_stop_time])[0,0],
-                                                                          sqrt_ts_LiMa_ul,sqrt_ts_flux_ul))
+                                                                          sig_ul,sqrt_ts_flux_ul))
                                     print("---------------------------------------------------------------------------")
 
                                 #!!!!!!!!CHECKS!!!!!!!!
@@ -404,15 +430,12 @@ class TRETS:
                                     print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.tt.iso)
                                     print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.tt.iso)
                                     print("---------------------------------------------------------------------------")
-                                ts_array.append(ts_sum)                            
+                                sig_array.append(sig)                            
 
 
                     #we safe the flux point
                     else:
                         bool_pass=False
-                        print("&&&&&&&&&&&&&&&&&&&&&&&&&")
-                        print("LAST TIME INTERVAL! n_on>10, n_off>10, sqrt_ts_LiMa>sqrt_TS_LiMa_threshold, sqrt_ts_flux>sqrt_TS_flux_UL_threshold")
-                        print("&&&&&&&&&&&&&&&&&&&&&&&&&")
 
                         #not an upper limit
                         lc_f_table["is_ul"].data[0]=np.zeros(shape=np.shape(lc_f_table["is_ul"].data[0]),dtype=bool)
@@ -426,14 +449,14 @@ class TRETS:
                             if print_check==1 or print_check==2:
                                 print("---------------------------------------------------------------------------")
                                 print("events' bin: %i to %i with %i events from previous obs. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f" \
-                                                  %(first_event,n_event,prev_events,sqrt_ts_LiMa,sqrt_ts_flux))
+                                                  %(first_event,n_event,prev_events,sig,sqrt_ts_flux))
 
                         else:
                             if print_check==1 or print_check==2:
                                 print("---------------------------------------------------------------------------")                            
                                 print("events' bin: %.0f to %.0f. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f" %(np.argwhere(event_time==list_t[arg_start_time])[0,0],
                                                                                                              np.argwhere(event_time==list_t[arg_stop_time])[0,0],
-                                                                                                             sqrt_ts_LiMa,sqrt_ts_flux))
+                                                                                                             sig,sqrt_ts_flux))
                         #!!!!!!!!CHECKS!!!!!!!!
                         if print_check==2:
                             print("---------------------------------------------------------------------------")
@@ -444,7 +467,7 @@ class TRETS:
                             print("datasets_ONOFF Tstart:",datasets_ONOFF.gti.time_start.tt.iso)
                             print("datasets_ONOFF Tstop:",datasets_ONOFF.gti.time_stop.tt.iso)
                             print("---------------------------------------------------------------------------")
-                        ts_array.append(ts_sum)
+                        sig_array.append(sig)
 
 
 
@@ -452,7 +475,7 @@ class TRETS:
         light_curve=vstack(lc_list)
 
         #add the Li&Ma TS detection value
-        TS_column=Table(data=[ts_array], names=["Li&Ma_TS_detection"], dtype=[np.float32])
-        light_curve.meta.update({"TS-thd":sqrt_TS_LiMa_threshold**2})
-        return light_curve.copy(),TS_column.copy()
+        sig_column=Table(data=[sig_array], names=["sig_detection"], dtype=[np.float32])
+        light_curve.meta.update({"sig-thd":sig_threshold})
+        return light_curve.copy(),sig_column.copy()
 
