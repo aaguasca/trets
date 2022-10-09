@@ -12,7 +12,9 @@ __all__=[
     "get_intervals",
     "conditional_ray",
     "split_observations",
-    "subrun_split"
+    "subrun_split",
+    "fraction_outside_interval",
+    "variance_error_prop_calculation"
 ]
 
 def get_intervals(data,n):
@@ -207,3 +209,63 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
                     time_intervals.append(i)
 
     return time_intervals
+
+
+def fraction_outside_interval(x,xmin,xmax):
+    """
+    The normalized fraction of the interval [x[0],x[1]]
+    that is outside the interval [xmin,xmax].
+
+    If [x[0],x[1]]>[xmin,xmax], return > 0
+    Else, return = 0.
+
+    Parameters
+    ----------
+    x: list or np.array
+        Array where the value of the first argument is
+        the start value of the interval and the value
+        in the second argument the stop value of the interval.
+    xmin: float or int
+        Minimum value.
+    xmax: float or int
+        Maximum value.
+    Returns
+    -------
+    """
+    frac_sup = np.max(x) - xmax
+    frac_inf = xmin - np.min(x)
+    if frac_sup>0:
+        sup=(np.max(x)-xmax)/(np.max(x)-np.min(x))
+    else:
+        sup=0
+    if frac_inf>0:
+        inf=(np.max(x)-xmin)/(np.max(x)-np.min(x))        
+    else:
+        inf=0
+    return inf+sup
+
+def variance_error_prop_calculation(errors,weights):
+    """
+    Compute the squared error of the weighted mean
+    through error propagation.
+    
+    Parameters
+    ----------
+    errors:
+        Intrinsic errors of each measurement.
+    weights:
+        weighted value for each measurement.
+        
+    Returns
+    -------
+    squared_mean_error:
+        squared error of the weighted mean.
+    """
+    weights=np.array(weights)
+    if np.sum(weights)!=1:
+        norm_weights=weights/np.sum(weights)
+    else:
+        norm_weights=weights
+    squared_mean_error=np.sum((np.array(errors)*norm_weights)**2)
+    
+    return squared_mean_error

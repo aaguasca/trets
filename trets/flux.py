@@ -3,7 +3,11 @@
 
 import time
 import ray
-from .utils import split_observations
+from .utils import (
+    split_observations,
+    fraction_outside_interval,
+variance_error_prop_calculation
+)
 from .methods.fixed import intrarun
 from .methods.variable import TRETS
 import astropy.units as u
@@ -15,7 +19,8 @@ from gammapy.estimators import (
 )
 
 __all__=[
-    "lightcurve_methods"
+    "lightcurve_methods",
+    "weight_fluxes"
 ]    
 
 class lightcurve_methods:
@@ -53,7 +58,7 @@ class lightcurve_methods:
                 "e_reco",                     #Reconstructed energy axis used in the SpectrumDatasetOnOff object
                 "e_true",                     #True energy axis used in the SpectrumDatasetOnOff object
                 "on_region",                  #On region located in the source position
-                "sqrt_TS_LiMa_threshold",     #Li & Ma significance threshold
+                "sig_threshold",              #Significance detection threshold
                 "sqrt_TS_flux_UL_threshold",  #Flux point Fit significance threshold
                 "print_check",                #Value that shows different values to check the script. 
                 "thres_time_twoobs",          #Threshold time to consider two consecutive runs
@@ -61,6 +66,7 @@ class lightcurve_methods:
                 "observations",               #Observation object with the runs used to compute the light curve.
                 "bkg_maker_reflected",        #Background maker to estimate the background.
                 "sky_model",                  #Assumed Skymodel of the source
+                "bool_bayesian",              #Boolean to use or not bayesian approach
                 "parallelization"             #Boolean to use parallelization or not
                 }
             
@@ -115,14 +121,15 @@ class lightcurve_methods:
                                         e_reco=self.e_reco,
                                         e_true=self.e_true,
                                         on_region=self.on_region,
-                                        sqrt_TS_LiMa_threshold=self.sqrt_TS_LiMa_threshold,
+                                        sig_threshold=self.sig_threshold,
                                         sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
                                         print_check=self.print_check,
                                         thres_time_twoobs=self.thres_time_twoobs,
                                         bin_event=self.bin_event,
                                         observations=obs,
                                         bkg_maker_reflected=self.bkg_maker_reflected,
-                                        best_fit_spec_model=self.sky_model
+                                        best_fit_spec_model=self.sky_model,
+                                        bool_bayesian=self.bool_bayesian
                     )
                     futures_list.append(futures)
             
@@ -158,15 +165,15 @@ class lightcurve_methods:
                                         e_reco=self.e_reco,
                                         e_true=self.e_true,
                                         on_region=self.on_region,
-                                        sqrt_TS_LiMa_threshold=self.sqrt_TS_LiMa_threshold,
+                                        sig_threshold=self.sig_threshold,
                                         sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
                                         print_check=self.print_check,
                                         thres_time_twoobs=self.thres_time_twoobs,
                                         bin_event=self.bin_event,
                                         observations=self.observations,
                                         bkg_maker_reflected=self.bkg_maker_reflected,
-                                        best_fit_spec_model=self.sky_model
-
+                                        best_fit_spec_model=self.sky_model,
+                                        bool_bayesian=self.bool_bayesian
                 )
                                
                 #light_curve,TS_column=TRETS_local()
@@ -215,4 +222,189 @@ class lightcurve_methods:
     
         print("Duration: ",int(time.time()-t_start)*u.s,)
         return light_curve
+
+
+def weight_fluxes(fluxes_to_weight,reference_fluxes):
+    """
+    Weight 
+    
+    Parameters
+    ----------
+    fluxes_to_weight:
+        Table with fluxes to weight using the same time bin as the one is 
+        use for the reference_fluxes
+    reference_fluxes:
+        Table with the fluxes we want to compare with fluxes_to_weight
+    
+    Returns
+    -------
+    list_averange_flux: list
+        List with the weighted average fluxes from fluxes_to_weight.
+    lst_std_flux: list
+        List with the standard error of the weighted average fluxes.
+    center_time: list
+        List with the central time value of the time bin of the weighted fluxes.
+    ref_flux: list
+        List with the reference flux value.
+    ref_errflux: list
+         List with the reference flux error.
+    ref_center_time: list
+        List with the central time value of the time bin of the reference fluxes.
+    """
+    
+    list_averange_flux=[]
+    lst_std_flux=[]
+    ref_flux=[]
+    ref_center_time=[]
+    ref_errflux=[]
+    center_time=[]
+    for flux in reference_fluxes:
+        int_time=[]
+        int_flux=[]
+        int_errflux=[]
+        time=[]
+        weight_tinside=[]
+        weight_ul=[]
+
+        for w_flux in fluxes_to_weight:
+            
+            #flux to weight inside the time interval of the reference flux
+            if round(w_flux["time_min"],9)>=round(flux["time_min"],9) and round(w_flux["time_max"],9)<=round(flux["time_max"],9):
+
+                #TRETS flux
+                if "sig-THD" in fluxes_to_weight.meta and "sig_detection" in fluxes_to_weight.colnames:
+                    if w_flux["sig_detection"]>=fluxes_to_weight.meta["sig-THD"]:
+                        int_flux.append(w_flux["flux"][0])
+                        int_errflux.append(w_flux["flux_err"][0])
+                        weight_ul.append(1)
+                        
+                    #UL
+                    else:
+                        int_flux.append(w_flux["flux_ul"][0])
+                        int_errflux.append(0.5*w_flux["flux_ul"][0])
+                        weight_ul.append(1+fluxes_to_weight.meta["sig-THD"]-w_flux["sig_detection"])
+
+                #fixed time interval flux
+                else:     
+                    if w_flux["sqrt_ts"][0]>2:
+                        int_flux.append(w_flux["flux"][0])
+                        int_errflux.append(w_flux["flux_err"][0])
+                        weight_ul.append(1)      
+                    #UL    
+                    else:
+                        int_flux.append(w_flux["flux_ul"][0])
+                        int_errflux.append(0.5*w_flux["flux_ul"][0])
+                        weight_ul.append(1+4-w_flux["ts"][0])
+                        
+                int_time.append(w_flux["time_max"]-w_flux["time_min"])
+                time.append(w_flux["time_max"])
+                time.append(w_flux["time_min"])
+                #the time interval is inside the reference flux time window
+                weight_tinside.append(1)
+
+            #starts inside the time bin of the reference flux but stops later than the reference flux
+            if round(w_flux["time_min"],9)>=round(flux["time_min"],9) and round(w_flux["time_min"],9)<=round(flux["time_max"],9) and round(w_flux["time_max"],9)>round(flux["time_max"],9):
+                t_out=fraction_outside_interval(x=[round(w_flux["time_min"],9),round(w_flux["time_max"],9)],
+                                                xmin=round(flux["time_min"],9),
+                                                xmax=round(flux["time_max"],9))
+
+                #TRETS flux
+                if "sig-THD" in fluxes_to_weight.meta and "sig_detection" in fluxes_to_weight.colnames:
+                    if w_flux["sig_detection"]>=fluxes_to_weight.meta["sig-THD"]:
+                        int_flux.append(w_flux["flux"][0])
+                        int_errflux.append(w_flux["flux_err"][0])
+                        weight_ul.append(1)  
+                    #UL
+                    else:
+                        int_flux.append(w_flux["flux_ul"][0])
+                        int_errflux.append(0.5*w_flux["flux_ul"][0])
+                        weight_ul.append(1+fluxes_to_weight.meta["sig-THD"]-w_flux["sig_detection"])   
+                        
+                #fixed time interval flux
+                else:            
+                    if w_flux["sqrt_ts"][0]>2:
+                        int_flux.append(w_flux["flux"][0])
+                        int_errflux.append(w_flux["flux_err"][0])
+                        weight_ul.append(1)
+                    #UL
+                    else:                               
+                        int_flux.append(w_flux["flux_ul"][0])
+                        int_errflux.append(0.5*w_flux["flux_ul"][0])
+                        weight_ul.append(1+4-w_flux["ts"][0])  
+                        
+                int_time.append(w_flux["time_max"]-w_flux["time_min"])
+                time.append(w_flux["time_max"])
+                time.append(w_flux["time_min"])
+                #not all the flux is inside the reference flux
+                weight_tinside.append(1-t_out)                        
+
+
+            #ends inside the time bin of the refence flux but starts before the reference flux
+            if round(w_flux["time_max"],9)>=round(flux["time_min"],9) and round(w_flux["time_max"],9)<=round(flux["time_max"],9) and round(w_flux["time_min"],9)<round(flux["time_min"],9):
+                t_out=fraction_outside_interval(x=[round(w_flux["time_min"],9),round(w_flux["time_max"],9)],
+                                                xmin=round(flux["time_min"],9),
+                                                xmax=round(flux["time_max"],9))
+
+                #TRETS flux
+                if "sig-THD" in fluxes_to_weight.meta and "sig_detection" in fluxes_to_weight.colnames:
+                    if w_flux["sig_detection"]>=fluxes_to_weight.meta["sig-THD"]:
+                        int_flux.append(w_flux["flux"][0])
+                        int_errflux.append(w_flux["flux_err"][0])
+                        weight_ul.append(1)   
+                    #UL
+                    else:
+                        int_flux.append(w_flux["flux_ul"][0])
+                        int_errflux.append(0.5*w_flux["flux_ul"][0])
+                        weight_ul.append(1+fluxes_to_weight.meta["sig-THD"]-w_flux["sig_detection"])
+                        
+                #fixed time interval flux
+                else:
+                    if w_flux["sqrt_ts"][0]>2:
+                        int_flux.append(w_flux["flux"][0])
+                        int_errflux.append(w_flux["flux_err"][0])
+                        weight_ul.append(1)
+                    #UL
+                    else:    
+                        int_flux.append(w_flux["flux_ul"][0])
+                        int_errflux.append(0.5*w_flux["flux_ul"][0])
+                        weight_ul.append(1+4-w_flux["ts"][0])
+                        
+                int_time.append(w_flux["time_max"]-w_flux["time_min"])
+                time.append(w_flux["time_max"])
+                time.append(w_flux["time_min"])
+                #not all the flux is inside the reference flux
+                weight_tinside.append(1-t_out)                        
+
+        int_time=np.array(int_time)
+        int_flux=np.array(int_flux)
+
+        #if we have one or more fluxes in the subrun obs
+        if len(int_time)!=0:
+            #weighted as the 1/variance
+#            weights=(1/np.array(int_errflux)**2)
+            weights=(1/np.array(int_errflux)**2)*(np.array(weight_tinside)/np.array(weight_ul))
+
+            flux_weighted_av=np.average(int_flux, weights=weights)
+            if len(int_time)>1:
+
+                #variance of the distribution of the weighted fluxes
+                #variance=np.average((int_flux-flux_weighted_av)**2, weights=weights)
+                #variance using error propagation of the weighted average
+                variance=variance_error_prop_calculation(int_errflux,weights)
+
+            else:
+                variance=np.array(int_errflux[0])**2
+            list_averange_flux.append(flux_weighted_av)
+            lst_std_flux.append(variance**0.5)
+
+            center_time.append((flux["time_min"]+flux["time_max"])/2)
+
+            ref_flux.append(flux["flux"][0])
+            ref_errflux.append(flux["flux_err"][0])
+            ref_center_time.append((flux["time_min"]+flux["time_max"])/2)
+            
+        else:
+            print("no fluxes in time bin [{},{}] MJD".format(flux["time_min"],flux["time_min"]))
+            
+    return list_averange_flux, lst_std_flux, center_time, ref_flux, ref_errflux, ref_center_time
 
