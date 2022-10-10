@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 __all__=[
-    temporal_resolution_hist,
-    significance_distribution
+    "temporal_resolution_hist",
+    "significance_distribution"
 ]
 
 def temporal_resolution_hist(ax,flux_points,temporal_units):
