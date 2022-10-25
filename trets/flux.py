@@ -3,10 +3,11 @@
 
 import time
 import ray
+import numpy as np
 from .utils import (
     split_observations,
     fraction_outside_interval,
-variance_error_prop_calculation
+    variance_error_prop_calculation
 )
 from .methods.fixed import intrarun
 from .methods.variable import TRETS
