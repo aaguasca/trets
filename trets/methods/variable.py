@@ -42,7 +42,7 @@ class TRETS:
 #            ray.init()
         else:
             self.is_ray = False
-            
+
     @conditional_ray('is_ray')
     def TRETS_algorithm(
         self,
@@ -80,8 +80,7 @@ class TRETS:
         e_true:
             True energy axis used in the SpectrumDatasetOnOff object
         on_region:
-            On region located in the source position, it must has the same size used in the IRFs.
-
+            On region located in the source position, it must have the same size used in the IRFs.
         sig_threshold:
             Significance threshold used to compute a integral flux.
         sqrt_TS_flux_UL_threshold:
@@ -110,7 +109,6 @@ class TRETS:
         -------
         lc_subrun: LightCurve
             Light curve object.
-
         TS_column: ~astropy.table.Table
             Detection TS of the source.
 
@@ -127,7 +125,7 @@ class TRETS:
 
         print("Run IDs considered in this execution: ", observations.ids)
 
-        # list where the the flux is saved
+        # list where the flux is saved
         lc_list = []
         # array to store TS for each time interval
         sig_array = []
