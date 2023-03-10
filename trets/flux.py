@@ -45,9 +45,11 @@ class lightcurve_methods:
         
         allowed_keys = self._allowed_keys_script()
         self.__dict__.update((key, value) for key, value in kwargs.items() if key in allowed_keys)
-        
-        assert self.e_inf_flux.to(self.e_reco.edges.unit).value in self.e_reco.edges.value
-        assert self.e_sup_flux.to(self.e_reco.edges.unit).value in self.e_reco.edges.value
+
+        print(self.e_inf_flux.to(self.e_reco.edges.unit).value,self.e_reco.edges.value)
+
+        assert round(self.e_inf_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
+        assert round(self.e_sup_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
 
         if self.script_name == "TRETS":
             assert len(self.e_reco.center) == 3
@@ -68,7 +70,7 @@ class lightcurve_methods:
                 "sqrt_TS_flux_UL_threshold",  # Flux point Fit significance threshold
                 "print_check",                # Value that shows different values to check the script.
                 "thres_time_twoobs",          # Threshold time to consider two consecutive runs
-                "bin_event",                  # Number of events added in each iteration.
+                "time_bin",                   # Time added in each iteration.
                 "observations",               # Observation object with the runs used to compute the light curve.
                 "bkg_maker_reflected",        # Background maker to estimate the background.
                 "sky_model",                  # Assumed Skymodel of the source
@@ -133,7 +135,7 @@ class lightcurve_methods:
                         sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
                         print_check=self.print_check,
                         thres_time_twoobs=self.thres_time_twoobs,
-                        bin_event=self.bin_event,
+                        time_bin=self.time_bin,
                         observations=obs,
                         bkg_maker_reflected=self.bkg_maker_reflected,
                         best_fit_spec_model=self.sky_model,
@@ -177,7 +179,7 @@ class lightcurve_methods:
                     sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
                     print_check=self.print_check,
                     thres_time_twoobs=self.thres_time_twoobs,
-                    bin_event=self.bin_event,
+                    time_bin=self.time_bin,
                     observations=self.observations,
                     bkg_maker_reflected=self.bkg_maker_reflected,
                     best_fit_spec_model=self.sky_model,

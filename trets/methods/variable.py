@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # Licensed under a 3-clause BSD style license - see LICENSE
 
-from ..utils import conditional_ray, get_intervals
+from ..utils import conditional_ray
 from ..bayes import BayesianProbability
 from astropy.time import (
     Time
 )
+import astropy.units as u
 from astropy.units import Quantity
 from astropy.table import vstack, Table
 
@@ -45,7 +46,6 @@ class TRETS:
 
     @conditional_ray('is_ray')
     def TRETS_algorithm(
-        self,
         E1,
         E2,
         e_reco,
@@ -55,7 +55,7 @@ class TRETS:
         sqrt_TS_flux_UL_threshold,
         print_check,
         thres_time_twoobs,
-        bin_event,
+        time_bin,
         observations,
         bkg_maker_reflected,
         best_fit_spec_model,
@@ -94,8 +94,8 @@ class TRETS:
         thres_time_twoobs: astropy.Units
             Threshold time to consider two consecutive runs. Use events from several runs 
             to compute the integral flux.
-        bin_event: Integer
-            Number of events added in each iteration.
+        time_bin: astropy.Quantity
+            Time added in each iteration.
         observations: `gammapy.data.Observations`
             Observation object with the runs used to compute the light curve.
         bkg_maker_reflected:
@@ -132,6 +132,8 @@ class TRETS:
         # dataset container where I keep the counts from previous observations
         prev_dataset = Datasets() 
         keep_dataset_bool = False
+        # If True, we take another start time of the dataset (Dataset passed conditions). Else
+        # keep the same start time
         bool_pass = False
         lc = LightCurveEstimator(
             energy_edges=[E1, E2],
@@ -142,9 +144,15 @@ class TRETS:
             atol=Quantity(1e-6, "s")
         )
 
+        if bool_bayesian:
+            n_on_thd = 0
+            n_off_thd = 0
+        else:
+            n_on_thd = 10
+            n_off_thd = 10
+
         for i, obs in zip(observations.ids, observations):
      
-            n_event = 0
             if print_check != 0:
                 print(" ")
                 print(" ")
@@ -155,15 +163,22 @@ class TRETS:
                         Quantity(observations[0].events.table["TIME"][0], "second")).iso)
                 print("last event time (TT)", (observations[0].gti.time_ref.tt + \
                         Quantity(observations[0].events.table["TIME"][-1], "second")).iso)
-
-            event_id = obs.events.table["EVENT_ID"].data
+                event_id = obs.events.table["EVENT_ID"].data
             event_time = obs.events.table["TIME"].data
-            array_event_ID_sorted = np.sort(obs.events.table["EVENT_ID"].data)
 
-            list_t = get_intervals(obs.events.table["TIME"].data, bin_event)
-            time_array = obs.gti.time_ref.tt+Quantity(list_t, "s")
+            obs_tini = obs.gti.time_start.tt.mjd * u.d
+            obs_tstop = obs.gti.time_stop.tt.mjd * u.d
+            dt = obs_tstop - obs_tini
+            list_t = np.linspace(0, dt[0].to_value("s"), int(np.ceil(dt.to_value("s")/time_bin.to_value("s"))))
+
+            # TODO: investigate why using obs.gti.time_start.tt.mjd and removing event_time[0] I loose events
+            time_array = obs.gti.time_ref.tt + Quantity(event_time[0] + list_t, "s")
+
+            if print_check != 0:
+                print("Time bin width used", list_t[1]-list_t[0], " s")
+                print("Total number of time bins edges:", len(time_array))
+
             arg_start_time = 0
-
             for cont_t in range(len(time_array)-1):
 
                 if bool_pass:
@@ -173,7 +188,11 @@ class TRETS:
                 arg_stop_time = cont_t+1
 
                 # filter the observation
-                filters = ObservationFilter(time_filter=Time([time_array[arg_start_time], time_array[arg_stop_time]]))
+                filters = ObservationFilter(
+                    time_filter=Time(
+                        [time_array[arg_start_time], time_array[arg_stop_time]]
+                    )
+                )
                 
                 # copy the observation because the filter deletes all events out of the ID range specified
                 subobs = copy.deepcopy(obs)
@@ -184,7 +203,7 @@ class TRETS:
                 t_end = time_array[arg_stop_time]
 
                 # data reduction
-                dataset = dataset_maker.run(dataset_empty.copy(name=str(n_event)), subobs)
+                dataset = dataset_maker.run(dataset_empty.copy(name=str(arg_start_time)), subobs)
                 dataset_on_off = bkg_maker_reflected.run(dataset, subobs)
 
                 # we do not have data from previous runs
@@ -218,8 +237,6 @@ class TRETS:
                 n_off = datasets_ONOFF.counts_off.data.sum()
 
                 if bool_bayesian:
-                    n_on_thd = 0
-                    n_off_thd = 0
 
                     if n_on+n_off > 400:
                         # compute W statistics
@@ -235,10 +252,9 @@ class TRETS:
                             alpha=acc_on/acc_off
                         )
                         sig = bayes.detection_significance()
+                        stat_sum_3bins_dataset = sig
                 else:
-                    n_on_thd = 10
-                    n_off_thd = 10
-                    
+
                     # compute W statistics
                     stat = WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
                     sig = stat.sqrt_ts
@@ -254,10 +270,10 @@ class TRETS:
                     print("OBSERVATION ID:", obs.obs_id)
                     print(f"start time observation {i}, {obs.gti.time_start.tt.iso}")
                     print(f"stop time observation {i}, {obs.gti.time_stop.tt.iso}")
-                    print("arg in array_event_ID_sorted first event", 
-                            np.argwhere(event_time == list_t[arg_start_time])[0, 0])
-                    print("arg in array_event_ID_sorted last event", 
-                            np.argwhere(event_time == list_t[arg_stop_time])[0, 0])
+                    print("arg first subobs event in observation",
+                            np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0])
+                    print("arg first subobs event in observation",
+                            np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0])
                     print("time first event", t_0.tt.iso)
                     print("-check gti start subobs-", subobs.gti.time_start.tt.iso)
                     print("time last event", t_end.tt.iso)
@@ -268,15 +284,17 @@ class TRETS:
                     print("datasets_ONOFF gti Tstop:", datasets_ONOFF.gti.time_stop.tt.iso)
                     print("dataset gti Tstart:", dataset.gti.time_start.tt.iso)
                     print("dataset gti Tstop:", dataset.gti.time_stop.tt.iso)
-                    print("first event ID:", event_id[np.argwhere(event_time == list_t[arg_start_time])][0, 0])
-                    print("last event ID:", event_id[np.argwhere(event_time == list_t[arg_stop_time])][0, 0])
+                    print("first event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[0])][0, 0])
+                    print("last event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[-1])][0, 0])
                     print("num events subobs:", len(subobs.events.table["EVENT_ID"]))
                     print("num events dataset:", 
                             datasets_ONOFF.counts_off.data.sum()+datasets_ONOFF.counts.data.sum())
-                    print("non, noff,             sig")
-                    print(n_on, n_off, sig)
+                    print("######################")
+                    print("non     noff     sig")
+                    print(f"{n_on:1.1f}     {n_off:1.1f}      {sig:1.1f}")
+                    print("######################")
                     print("counts On region:", datasets_ONOFF.counts.data.reshape(-1))
-                    print("counts Off region:", datasets_ONOFF.background.data.reshape(-1))
+                    print("counts Off region:", datasets_ONOFF.counts_off.data.reshape(-1))
                     print("excess counts:", datasets_ONOFF.excess.data.reshape(-1))
                     print("stat_sum TS bins", stat_sum_3bins_dataset)
 
@@ -337,9 +355,9 @@ class TRETS:
 
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
-                                print("events' bin: %.0f to %.0f.  sqrt(TS)_Li&Ma=%.1f -> UL!" % (
-                                    np.argwhere(event_time == list_t[arg_start_time])[0, 0],
-                                    np.argwhere(event_time == list_t[arg_stop_time])[0, 0],
+                                print("events' bin: %.0f to %.0f.  Sig=%.1f -> UL!" % (
+                                    np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
+                                    np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
                                     sig_ul)
                                 )
                                 print("---------------------------------------------------------------------------")
@@ -422,9 +440,9 @@ class TRETS:
 
                                 if print_check == 1 or print_check == 2:
                                     print("---------------------------------------------------------------------------")
-                                    print("events' bin: %.0f to %.0f. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f ->UL!" % (
-                                        np.argwhere(event_time == list_t[arg_start_time])[0, 0],
-                                        np.argwhere(event_time == list_t[arg_stop_time])[0, 0],
+                                    print("events' bin: %.0f to %.0f. detect_sig=%.1f, sqrt(TS)_flux=%.1f ->UL!" % (
+                                        np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
+                                        np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
                                         sig_ul, sqrt_ts_flux_ul))
                                     print("---------------------------------------------------------------------------")
 
@@ -439,7 +457,7 @@ class TRETS:
                                     print("---------------------------------------------------------------------------")
                                 sig_array.append(sig)                            
 
-                    # we safe the flux point
+                    # we save the flux point
                     else:
                         bool_pass = False
 
@@ -454,10 +472,10 @@ class TRETS:
                             prev_dataset = Datasets()
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
-                                print("events' bin: %i to %i with %i events from previous obs. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f" \
+                                print("events' bin: %i to %i with %i events from previous obs. detect_sig=%.1f, sqrt(TS)_flux=%.1f" \
                                                   % (
-                                                      np.argwhere(event_time == list_t[arg_start_time])[0, 0],
-                                                      np.argwhere(event_time == list_t[arg_stop_time])[0, 0],
+                                                      np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
+                                                      np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
                                                       prev_events, sig, sqrt_ts_flux
                                                   )
                                 )
@@ -465,9 +483,9 @@ class TRETS:
                         else:
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")                            
-                                print("events' bin: %.0f to %.0f. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f" % (
-                                    np.argwhere(event_time == list_t[arg_start_time])[0, 0],
-                                    np.argwhere(event_time == list_t[arg_stop_time])[0, 0],
+                                print("events' bin: %.0f to %.0f. detect_sig=%.1f, sqrt(TS)_flux=%.1f" % (
+                                    np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
+                                    np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
                                     sig, sqrt_ts_flux))
                         # !!!!!!!!CHECKS!!!!!!!!
                         if print_check == 2:
@@ -484,7 +502,7 @@ class TRETS:
         # stack al the flux point tables into a single table
         light_curve = vstack(lc_list)
 
-        # add the Li&Ma TS detection value
+        # add the detection significance value
         sig_column = Table(data=[sig_array], names=["sig_detection"], dtype=[np.float32])
         light_curve.meta.update({"sig-thd": sig_threshold})
         return light_curve.copy(), sig_column.copy()
