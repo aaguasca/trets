@@ -2,16 +2,16 @@
 # Licensed under a 3-clause BSD style license - see LICENSE
 
 import matplotlib.pyplot as plt
-import numpy as np
 import astropy.units as u
 
-__all__=[
+__all__ = [
     "temporal_resolution_hist",
     "significance_distribution",
     "temporal_resolution_vs_sig"
 ]
 
-def temporal_resolution_hist(ax,flux_points,temporal_units):
+
+def temporal_resolution_hist(ax, flux_points, temporal_units):
     """
     Plot the histogram of the time bins of the fluxes in the
     flux container flux_points.
@@ -31,18 +31,18 @@ def temporal_resolution_hist(ax,flux_points,temporal_units):
         Axis
     """
 
-    #flux_points=flux_points.to_table(sed_type="flux", format="lightcurve")
-    mask_ul=flux_points["is_ul"]==True
+    # flux_points=flux_points.to_table(sed_type="flux", format="lightcurve")
+    mask_ul = flux_points["is_ul"] is True
 
-    #flux points
-    time_array=(flux_points["time_max"][~mask_ul.reshape(-1)]-flux_points["time_min"][~mask_ul.reshape(-1)])*u.day
-    #UL
-    time_array_ul=(flux_points["time_max"][mask_ul.reshape(-1)]-flux_points["time_min"][mask_ul.reshape(-1)])*u.day
+    # flux points
+    time_array = (flux_points["time_max"][~mask_ul.reshape(-1)]-flux_points["time_min"][~mask_ul.reshape(-1)])*u.day
+    # UL
+    time_array_ul = (flux_points["time_max"][mask_ul.reshape(-1)]-flux_points["time_min"][mask_ul.reshape(-1)])*u.day
 
-    time_array=time_array.to_value(temporal_units)
-    n=ax.hist(time_array,bins=50,label="Flux point")
-    time_array_ul=time_array_ul.to_value(temporal_units)
-    n2=plt.hist(time_array_ul,bins=n[1],label="UL")
+    time_array = time_array.to_value(temporal_units)
+    n = ax.hist(time_array, bins=50, label="Flux point")
+    time_array_ul = time_array_ul.to_value(temporal_units)
+    ax.hist(time_array_ul, bins=n[1], label="UL")
     ax.set_title("Temporal resolution histogram")
     ax.set_xlabel("Time interval [{}]".format(temporal_units))
     ax.set_ylabel("# of fluxes")
@@ -50,7 +50,7 @@ def temporal_resolution_hist(ax,flux_points,temporal_units):
     return ax
 
 
-def significance_distribution(ax,flux_points):
+def significance_distribution(ax, flux_points):
     """
     Plot the significance of the fluxes of the flux container 
     flux_points as a function of time.
@@ -69,16 +69,16 @@ def significance_distribution(ax,flux_points):
         Axis
     """
 
-    #flux_points=flux_points.to_table(sed_type="flux", format="lightcurve")
-    mask_ul=flux_points["is_ul"]==True
+    # flux_points=flux_points.to_table(sed_type="flux", format="lightcurve")
+    mask_ul = flux_points["is_ul"] is True
 
-    x=(flux_points["time_max"]+flux_points["time_min"])/2
+    x = (flux_points["time_max"]+flux_points["time_min"])/2
 
-    plt.plot(x,flux_points["sig_detection"],"o",label="Flux point")
-    plt.plot(x[mask_ul.reshape(-1)],flux_points["sig_detection"][mask_ul.reshape(-1)],"o",label="UL")
+    plt.plot(x, flux_points["sig_detection"], "o", label="Flux point")
+    plt.plot(x[mask_ul.reshape(-1)], flux_points["sig_detection"][mask_ul.reshape(-1)], "o", label="UL")
 
-    xmin,xmax=ax.get_xlim()
-    ax.hlines(flux_points.meta["SIG-THD"],xmin,xmax,label="Threshold",color="k")
+    xmin, xmax = ax.get_xlim()
+    ax.hlines(flux_points.meta["SIG-THD"], xmin, xmax, label="Threshold", color="k")
     ax.set_ylabel(r"Significance [$\sigma$]")
     ax.set_xlabel("Time [MJD]")
     plt.legend(loc="lower left")
@@ -86,16 +86,14 @@ def significance_distribution(ax,flux_points):
     return ax
 
 
-
-def temporal_resolution_vs_sig(ax,list_tab,temporal_units):
+def temporal_resolution_vs_sig(ax, list_tab, temporal_units):
     """
     Plot the median value of the temporal resolution histogram
     as a function of the detection significance threshold.
     By default, edges do the boxes delimiters the range between 
     the 25th and 75th interpercentile, and the error bars delimiters
     the 5th to 95th interpercentile range.
-    """
-    
+
     Parameters
     ----------
     ax:
@@ -110,9 +108,10 @@ def temporal_resolution_vs_sig(ax,list_tab,temporal_units):
     -------
     ax:
         Axis
+    """
 
-    list_sig_detection=[]
-    list_t_bins=[]
+    list_sig_detection = []
+    list_t_bins = []
     for tab in list_tab:
         list_t_bins.append(
             ((tab["time_max"]-tab["time_min"]).value*u.d).to_value(temporal_units)
@@ -122,7 +121,7 @@ def temporal_resolution_vs_sig(ax,list_tab,temporal_units):
     ax.boxplot(
         list_t_bins,
         positions=list_sig_detection,
-        whis=[5,95],
+        whis=[5, 95],
         sym=""
     )
 

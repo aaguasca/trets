@@ -5,13 +5,13 @@ import numpy as np
 from scipy.stats import norm
 import math
 from math import factorial 
-from decimal import Decimal
 import warnings
 from scipy.special import loggamma
 
-__all__=[
+__all__ = [
     "BayesianProbability"
 ]
+
 
 class BayesianProbability:
     """
@@ -27,12 +27,12 @@ class BayesianProbability:
     The probability that there is a source in the ON/OFF observations is also included.
     """
     
-    def __init__(self,n_on,n_off,alpha):
-        self.n_on=n_on
-        self.n_off=n_off
-        self.alpha=alpha
+    def __init__(self, n_on, n_off, alpha):
+        self.n_on = n_on
+        self.n_off = n_off
+        self.alpha = alpha
         
-    def _factorial(self,number):
+    def _factorial(self, number):
         """
         Compute the factorial of number.
         
@@ -44,15 +44,44 @@ class BayesianProbability:
         Returns
         -------
         fact: int
-            Factiorial value of number.
+            Factorial value of number.
             
         """
 
-        fact=factorial(number)
+        fact = factorial(number)
 
         return fact
 
-    def poisson_dist(self,_lambda,n):
+    def _eq_denominator(self):
+        """
+        Compute the denominator of the expansion of the normalized binomial expansion. i.e.
+        the normalization factor necessary in order to have $\sum{C_i}_{i}^{n_on}=1$.
+
+        Returns
+        -------
+        denominator: int or float
+            Value of the normalization factor.
+
+        """
+        event_j = np.arange(self.n_on + 1, dtype=int)
+
+        denominator = 0
+        if self.n_on > 110 or self.n_off > 110:
+            alpha_term = round(1 + self.alpha ** (-1))
+            for j in event_j:
+                first_term = (alpha_term ** int(j))
+                second_term = (self._factorial(self.n_on + self.n_off - j) // self._factorial(self.n_on - j))
+                denominator += first_term * second_term
+        else:
+            alpha_term = 1 + self.alpha ** (-1)
+            for j in event_j:
+                first_term = (alpha_term ** int(j))
+                second_term = (self._factorial(self.n_on + self.n_off - j) / self._factorial(self.n_on - j))
+                denominator += first_term * second_term
+
+        return denominator
+
+    def poisson_dist(self, _lambda, n):
         """
         Probability mass function of a Poissonian distribution.
         
@@ -61,7 +90,7 @@ class BayesianProbability:
         _lambda: float
             Expected value
         n: int
-            Number of occurances.
+            Number of occurrences.
             
         Returns
         -------
@@ -69,9 +98,8 @@ class BayesianProbability:
         
         """
         return ((_lambda**n)/(self._factorial(n)))*math.exp(-_lambda)
-        
-        
-    def _normalized_coeff_binomial_expansion(self,event_i):
+
+    def _normalized_coeff_binomial_expansion(self, event_i):
         """
         Probability that n - {i} events are background events.
                 
@@ -83,66 +111,35 @@ class BayesianProbability:
         Returns
         -------
         C_i : int
-            The normalized coefficient for the i-th ON event. i.e. the the probability for the
+            The normalized coefficient for the i-th ON event. i.e. the probability for the
             n - {i} events are background events.
         
         """
-        def eq_denominator():
-            """
-            Compute the denominator of the expansion of the normalized binomial expansion. i.e.
-            the normalization factor necessary in order to have \sum{C_i}_{i}^{n_on}=1. Then,
-            
-            Returns
-            -------
-            denominator: int or float
-                Value of the normalization factor.
-            
-            """
-            event_j=np.arange(self.n_on+1, dtype=int)
-            
-            denominator=0   
-            if self.n_on>110 or self.n_off>110:
-                alpha_term=round(1+self.alpha**(-1))
-                for j in event_j:
-                    first_term=((alpha_term)**int(j))
-                    second_term=(self._factorial(self.n_on+self.n_off-j)//self._factorial(self.n_on-j))            
-                    denominator+=first_term*second_term
-            else:
-                alpha_term=1+self.alpha**(-1)
-                for j in event_j:
-                    first_term=((alpha_term)**int(j))
-                    second_term=(self._factorial(self.n_on+self.n_off-j)/self._factorial(self.n_on-j))            
-                    denominator+=first_term*second_term
-                
-            return denominator
-              
 
-        #compute denominator
-        denominator=eq_denominator()
+        # compute denominator
+        denominator = self._eq_denominator()
     
-        #compute numerator
-        if self.n_on>110 or self.n_off>110:
+        # compute numerator
+        if self.n_on > 110 or self.n_off > 110:
             warnings.warn("Warning: The value may not be precise! We are dealing with huge values")
     
-            alpha_term=round(1+self.alpha**(-1))
-            first_term=((alpha_term)**event_i)
-            second_term=(self._factorial(self.n_on+self.n_off-event_i)//self._factorial(self.n_on-event_i)) 
-            numerator=first_term*second_term
+            alpha_term = round(1+self.alpha**(-1))
+            first_term = (alpha_term**event_i)
+            second_term = (self._factorial(self.n_on+self.n_off-event_i)//self._factorial(self.n_on-event_i))
+            numerator = first_term*second_term
             
-            C=numerator/denominator
+            C = numerator/denominator
             
         else:
-            alpha_term=1+self.alpha**(-1)
-            first_term=((alpha_term)**event_i)
-            second_term=(self._factorial(self.n_on+self.n_off-event_i)/self._factorial(self.n_on-event_i)) 
-            numerator=first_term*second_term
+            alpha_term = 1+self.alpha**(-1)
+            first_term = (alpha_term**event_i)
+            second_term = (self._factorial(self.n_on+self.n_off-event_i)/self._factorial(self.n_on-event_i))
+            numerator = first_term*second_term
             
-            C=numerator/denominator
+            C = numerator/denominator
         
         return C
-    
-    
-    
+
     def _log_normalized_0_coeff_binomial_expansion(self):
         """
         Log Probability that n events are background events.
@@ -154,60 +151,30 @@ class BayesianProbability:
             n events to be background events.
         
         """
-        def eq_denominator():
-            """
-            Compute the denominator of the expansion of the normalized binomial expansion. i.e.
-            the normalization factor necessary in order to have \sum{C_i}_{i}^{n_on}=1. Then,
-            
-            Returns
-            -------
-            denominator: int or float
-                Value of the normalization factor.
-            
-            """
-            event_j=np.arange(self.n_on+1, dtype=int)
-            
-            denominator=0   
-            if self.n_on>110 or self.n_off>110:
-                alpha_term=round(1+self.alpha**(-1))
-                for j in event_j:
-                    first_term=((alpha_term)**int(j))
-                    second_term=(self._factorial(self.n_on+self.n_off-j)//self._factorial(self.n_on-j))            
-                    denominator+=first_term*second_term
-            else:
-                alpha_term=1+self.alpha**(-1)
-                for j in event_j:
-                    first_term=((alpha_term)**int(j))
-                    second_term=(self._factorial(self.n_on+self.n_off-j)/self._factorial(self.n_on-j))            
-                    denominator+=first_term*second_term
-                
-            return denominator
-              
 
-        #compute denominator
-        denominator=math.log(eq_denominator())
+        # compute denominator
+        denominator = math.log(self._eq_denominator())
     
-        #compute numerator
-        if self.n_on>110 or self.n_off>110:
+        # compute numerator
+        if self.n_on > 110 or self.n_off > 110:
             warnings.warn("Warning: The value may not be precise! We are dealing with huge values")
     
             first_term = loggamma(self.n_on+self.n_off+1)
             second_term = loggamma(self.n_on+1)
-            numerator=first_term-second_term
+            numerator = first_term-second_term
             
-            C=numerator-denominator
+            C = numerator-denominator
             
         else:
-            first_term=loggamma(self.n_on+self.n_off+1)
-            second_term=loggamma(self.n_on+1) 
-            numerator=first_term-second_term
+            first_term = loggamma(self.n_on+self.n_off+1)
+            second_term = loggamma(self.n_on+1)
+            numerator = first_term-second_term
             
-            C=numerator-denominator
+            C = numerator-denominator
         
         return C    
     
-
-    def posterior_proba(self,mu_s):
+    def posterior_proba(self, mu_s):
         """
         Compute the posterior probability for a source with an expected signal of mu_s.
         
@@ -222,29 +189,29 @@ class BayesianProbability:
             Posterior probability
         
         """
-        event_i=np.arange(self.n_on+1, dtype=int)
-        self.proba=[]
-        if self.n_on>110 or self.n_off>110:
-            if mu_s==0:
-                C=self._log_normalized_0_coeff_binomial_expansion()                
-                self.proba=np.exp(np.array(C))
+        event_i = np.arange(self.n_on+1, dtype=int)
+        self.proba = []
+        if self.n_on > 110 or self.n_off > 110:
+            if mu_s == 0:
+                C = self._log_normalized_0_coeff_binomial_expansion()
+                self.proba = np.exp(np.array(C))
             else:
                 for i in event_i:
-                    C=self._normalized_coeff_binomial_expansion(int(i))#assert i and mu_s are int type
-                    poss=self.poisson_dist(mu_s,int(i))#assert i and mu_s are int type
+                    C = self._normalized_coeff_binomial_expansion(int(i))  # assert i and mu_s are int type
+                    poss = self.poisson_dist(mu_s, int(i))  # assert i and mu_s are int type
                     self.proba.append(C*poss)
         else:
-            if mu_s==0:
-#                 C=self._normalized_coeff_binomial_expansion(event_i=0) 
-                C=self._log_normalized_0_coeff_binomial_expansion()
-                self.proba=np.exp(np.array(C))
+            if mu_s == 0:
+                # C = self._normalized_coeff_binomial_expansion(event_i=0
+                C = self._log_normalized_0_coeff_binomial_expansion()
+                self.proba = np.exp(np.array(C))
             else:
                 for i in event_i:
-                    C=self._normalized_coeff_binomial_expansion(int(i))#assert i and mu_s are int type
-                    poss=self.poisson_dist(mu_s,int(i))#assert i and mu_s are int type
+                    C = self._normalized_coeff_binomial_expansion(int(i))  # assert i and mu_s are int type
+                    poss = self.poisson_dist(mu_s, int(i))  # assert i and mu_s are int type
                     self.proba.append(C*poss)
 
-        self.proba=np.array(self.proba)
+        self.proba = np.array(self.proba)
         return self.proba.sum()
     
     def detection_significance(self):
@@ -264,9 +231,9 @@ class BayesianProbability:
         significance = self.proba_to_sigma(detection_proba)
         return significance
     
-    def proba_to_sigma(self,proba):
+    def proba_to_sigma(self, proba):
         """
-        Conversion from probabilty to Gaussian standard deviations.
+        Conversion from probability to Gaussian standard deviations.
         
         Parameters
         ----------
@@ -279,7 +246,7 @@ class BayesianProbability:
             Gaussian standard deviations.
         
         """
-        sigma=norm.isf(0.5*proba)
-        #norm.ppf(1-proba * 0.5 )
+        sigma = norm.isf(0.5*proba)
+        # sigma = norm.ppf(1-proba * 0.5 )
         return sigma
     

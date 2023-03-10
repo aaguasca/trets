@@ -3,7 +3,7 @@
 
 from setuptools import find_packages, setup
 
-VERSION="0.0.1"
+VERSION = "0.0.1"
 setup(
     name="trets",
     version=VERSION,

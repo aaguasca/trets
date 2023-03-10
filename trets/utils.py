@@ -8,7 +8,7 @@ import numpy as np
 from gammapy.data import Observations
 import math
 
-__all__=[
+__all__ = [
     "get_intervals",
     "conditional_ray",
     "split_observations",
@@ -17,7 +17,8 @@ __all__=[
     "variance_error_prop_calculation"
 ]
 
-def get_intervals(data,n):
+
+def get_intervals(data, n):
     """
     Return the values whose arg satisfies that it is a
     multiple of n. The value in the last position is also
@@ -35,18 +36,19 @@ def get_intervals(data,n):
         Array that satisfies the condition.
     """
 
-    if isinstance(data,np.ndarray):
-        if len(np.shape(data))!=1:
+    if isinstance(data, np.ndarray):
+        if len(np.shape(data)) != 1:
             raise ValueError("data has more than one dimension")
     else:
-        data=np.array(data)
-        if len(np.shape(data))!=1:
+        data = np.array(data)
+        if len(np.shape(data)) != 1:
             raise ValueError("data has more than one dimension")
             
-    selected_data=data[::n]
-    if (len(data)-1)%n!=0:
-        selected_data=np.concatenate((selected_data,[data[-1]]))
+    selected_data = data[::n]
+    if (len(data)-1) % n != 0:
+        selected_data = np.concatenate((selected_data, [data[-1]]))
     return selected_data
+
 
 def conditional_ray(attr):
     """
@@ -69,7 +71,7 @@ def conditional_ray(attr):
     return decorator
 
 
-def split_observations(observations,threshold_time):
+def split_observations(observations, threshold_time):
     """
     Split the dataset of observations into subsets where the interval between observations is
     lower than threshold_time.
@@ -79,40 +81,40 @@ def split_observations(observations,threshold_time):
     observations:
         Observations object desired to split.
     threshold_time: astropy.Quantity
-        Threshold time between observations to considere them as in the same dataset.
+        Threshold time between observations to consider them as in the same dataset.
 
     return
     ------
     splitted_obs: list
-        list of Observations objects splitted according to threshold_time
+        list of Observations objects split according to threshold_time
     """
-    splitted_obs=[]
-    joined_runs=[]
-    last=False
-    prev_run_join=False
+    splitted_obs = []
+    joined_runs = []
+    last = False
+    prev_run_join = False
     for i in range(len(observations)-1):
         if not prev_run_join:
             joined_runs.append(observations[i])
 
         sep_time = (observations[i+1].gti.time_start - observations[i].gti.time_stop).to(threshold_time.unit)
-        #print(observations[i].obs_id,observations[i+1].obs_id,sep_time)
+        # print(observations[i].obs_id,observations[i+1].obs_id,sep_time)
 
         if sep_time < threshold_time:
             joined_runs.append(observations[i+1])
-            prev_run_join=True
+            prev_run_join = True
             if i == len(observations)-2:
-                last=True
+                last = True
         else:
             splitted_obs.append(Observations(joined_runs))
-            joined_runs=[]
-            prev_run_join=False
+            joined_runs = []
+            prev_run_join = False
             if i == len(observations)-2:
-                last=True
+                last = True
 
-        if last==True and prev_run_join==True:
+        if last is True and prev_run_join is True:
             splitted_obs.append(Observations(joined_runs))
 
-        if last==True and prev_run_join==False:
+        if last is True and prev_run_join is False:
             splitted_obs.append(Observations([observations[i+1]]))
 
     return splitted_obs
@@ -122,7 +124,7 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
     """
     Obtain the time intervals required to divide a run into subruns with a gti of interval_subrun,
     intervals in the extremes of the run account the extra or infratime of the run to obtain an
-    interger number of subruns.
+    integer number of subruns.
         
     parameters
     ----------
@@ -130,7 +132,9 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
         The number of time we want the subruns to have.
     time_interval_obs: list
         List of [t_start,tstop] for each observation object.
-        
+    atol: float
+        Resolution.
+
     return
     ------
     time_intervals: list
@@ -138,70 +142,67 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
         
     """
 
-    time_intervals=[]
+    time_intervals = []
     for time_run in time_interval_obs:
 
-        intervals=[]
-        t0=time_run.tt.mjd[0]
-        tf=time_run.tt.mjd[-1]
+        intervals = []
+        t0 = time_run.tt.mjd[0]
+        tf = time_run.tt.mjd[-1]
 
-        dt=((tf-t0)*u.d).to_value("min")
-        sections=dt/interval_subrun.to_value("min")
+        dt = ((tf-t0)*u.d).to_value("min")
+        sections = dt/interval_subrun.to_value("min")
 
-        if sections<1:
-            time_intervals.append(Time([t0,tf],format="mjd",scale="tt"))
+        if sections < 1:
+            time_intervals.append(Time([t0, tf], format="mjd", scale="tt"))
         else:            
-            if round(sections)-round(sections,int(-math.log10(atol)))==0:
-                ti=t0+interval_subrun.to_value("d")
-                t_end=tf-interval_subrun.to_value("d")
+            if round(sections)-round(sections, int(-math.log10(atol))) == 0:
+                ti = t0+interval_subrun.to_value("d")
+                t_end = tf-interval_subrun.to_value("d")
             else:
-                if np.modf(sections)[0]>0.6 or np.modf(sections)[0]<0.4 or sections<4:
-                    if np.modf(sections)[0]<0.4:
-                        ti=t0+interval_subrun.to_value("d")*(1+np.modf(sections)[0])
+                if np.modf(sections)[0] > 0.6 or np.modf(sections)[0] < 0.4 or sections < 4:
+                    if np.modf(sections)[0] < 0.4:
+                        ti = t0+interval_subrun.to_value("d")*(1+np.modf(sections)[0])
                     else:
-                        ti=t0+interval_subrun.to_value("d")*(np.modf(sections)[0])
-                    if int(sections)==1:
-                        t_end=ti
+                        ti = t0+interval_subrun.to_value("d")*(np.modf(sections)[0])
+                    if int(sections) == 1:
+                        t_end = ti
                     else:
-                        t_end=tf-interval_subrun.to_value("d")
+                        t_end = tf-interval_subrun.to_value("d")
                 else:
-                    #select the time that correspond to the end of the first subrun if we add half of the
-                    #residual to this run
-                    ti=t0+interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
-                    #select the time that correspond to the end of the last subrun if we add half of the
-                    #residual to this run
-                    t_end=tf-interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
+                    # select the time that correspond to the end of the first subrun if we add half of the
+                    # residual to this run
+                    ti = t0+interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
+                    # select the time that correspond to the end of the last subrun if we add half of the
+                    # residual to this run
+                    t_end = tf-interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
             
-            
-            #obtain the initial and final time of subruns with the same time interval as "interval_subrun"
-            if int(sections)==1:#for values 1<sections<2
-                interval=np.linspace(ti,t_end,1)
+            # obtain the initial and final time of subruns with the same time interval as "interval_subrun"
+            if int(sections) == 1:  # for values 1<sections<2
+                interval = np.linspace(ti, t_end, 1)
             else:
-                if np.modf(sections)[0]>0.6 or np.modf(sections)[0]<0.4 or sections<4:
-                    if np.modf(sections)[0]<0.4:
-                        interval=np.linspace(ti,t_end,int(sections)-1)
+                if np.modf(sections)[0] > 0.6 or np.modf(sections)[0] < 0.4 or sections < 4:
+                    if np.modf(sections)[0] < 0.4:
+                        interval = np.linspace(ti, t_end, int(sections)-1)
                     else:
-                        interval=np.linspace(ti,t_end,int(sections))
+                        interval = np.linspace(ti, t_end, int(sections))
                 else:
-                    if round(sections)-round(sections,int(-math.log10(atol)))==0:
-                        interval=np.linspace(ti,t_end,int(sections))
+                    if round(sections)-round(sections, int(-math.log10(atol))) == 0:
+                        interval = np.linspace(ti, t_end, int(sections))
                     else:
-                        interval=np.linspace(ti,t_end,int(sections)-1)
+                        interval = np.linspace(ti, t_end, int(sections)-1)
 
-        
-            if int(sections)==1 and np.modf(sections)[0]<0.4:
-                time_intervals.append(Time([t0,tf],format="mjd",scale="tt"))
+            if int(sections) == 1 and np.modf(sections)[0] < 0.4:
+                time_intervals.append(Time([t0, tf], format="mjd", scale="tt"))
             else:
                 for i in range(len(interval)):
-                    #replace the initial time of the first subrun to consider the resiudal
-                    if i==0:
-                        intervals.append(Time(t0,format='mjd',scale="tt"))
+                    # replace the initial time of the first subrun to consider the residual
+                    if i == 0:
+                        intervals.append(Time(t0, format='mjd', scale="tt"))
 
-                    intervals.append(Time(interval[i],format='mjd',scale="tt"))
-                    #replace the final time of the first subrun to consider the resiudal        
-                    if i==len(interval)-1:
-                        intervals.append(Time(tf,format='mjd',scale="tt"))
-
+                    intervals.append(Time(interval[i], format='mjd', scale="tt"))
+                    # replace the final time of the first subrun to consider the residual
+                    if i == len(interval)-1:
+                        intervals.append(Time(tf, format='mjd', scale="tt"))
 
                 time = [Time([tstart, tstop]) for tstart, tstop in zip(intervals[:-1], intervals[1:])]
 
@@ -211,7 +212,7 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
     return time_intervals
 
 
-def fraction_outside_interval(x,xmin,xmax):
+def fraction_outside_interval(x, xmin, xmax):
     """
     The normalized fraction of the interval [x[0],x[1]]
     that is outside the interval [xmin,xmax].
@@ -234,17 +235,18 @@ def fraction_outside_interval(x,xmin,xmax):
     """
     frac_sup = np.max(x) - xmax
     frac_inf = xmin - np.min(x)
-    if frac_sup>0:
-        sup=(np.max(x)-xmax)/(np.max(x)-np.min(x))
+    if frac_sup > 0:
+        sup = (np.max(x)-xmax)/(np.max(x)-np.min(x))
     else:
-        sup=0
-    if frac_inf>0:
-        inf=(np.max(x)-xmin)/(np.max(x)-np.min(x))        
+        sup = 0
+    if frac_inf > 0:
+        inf = (np.max(x)-xmin)/(np.max(x)-np.min(x))
     else:
-        inf=0
+        inf = 0
     return inf+sup
 
-def variance_error_prop_calculation(errors,weights):
+
+def variance_error_prop_calculation(errors, weights):
     """
     Compute the squared error of the weighted mean
     through error propagation.
@@ -261,11 +263,11 @@ def variance_error_prop_calculation(errors,weights):
     squared_mean_error:
         squared error of the weighted mean.
     """
-    weights=np.array(weights)
-    if np.sum(weights)!=1:
-        norm_weights=weights/np.sum(weights)
+    weights = np.array(weights)
+    if np.sum(weights) != 1:
+        norm_weights = weights/np.sum(weights)
     else:
-        norm_weights=weights
-    squared_mean_error=np.sum((np.array(errors)*norm_weights)**2)
+        norm_weights = weights
+    squared_mean_error = np.sum((np.array(errors)*norm_weights)**2)
     
     return squared_mean_error

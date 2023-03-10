@@ -1,4 +1,4 @@
-#initialize the TRETS package. to make Python treat directories containing the file as packages
+# initialize the TRETS package. to make Python treat directories containing the file as packages
 
 from . import methods
 
