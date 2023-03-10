@@ -457,7 +457,12 @@ class TRETS:
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
                                 print("events' bin: %i to %i with %i events from previous obs. sqrt(TS)_Li&Ma=%.1f, sqrt(TS)_flux=%.1f" \
-                                                  % (first_event, n_event, prev_events, sig, sqrt_ts_flux))
+                                                  % (
+                                                      np.argwhere(event_time == list_t[arg_start_time])[0, 0],
+                                                      np.argwhere(event_time == list_t[arg_stop_time])[0, 0],
+                                                      prev_events, sig, sqrt_ts_flux
+                                                  )
+                                )
 
                         else:
                             if print_check == 1 or print_check == 2:
