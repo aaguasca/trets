@@ -76,19 +76,19 @@ def split_observations(observations, threshold_time):
     Split the dataset of observations into subsets where the interval between observations is
     lower than threshold_time.
 
-    parameters
+    Parameters
     ----------
     observations:
         Observations object desired to split.
     threshold_time: astropy.Quantity
         Threshold time between observations to consider them as in the same dataset.
 
-    return
-    ------
-    splitted_obs: list
+    Returns
+    -------
+    split_obs: list
         list of Observations objects split according to threshold_time
     """
-    splitted_obs = []
+    split_obs = []
     joined_runs = []
     last = False
     prev_run_join = False
@@ -105,38 +105,38 @@ def split_observations(observations, threshold_time):
             if i == len(observations)-2:
                 last = True
         else:
-            splitted_obs.append(Observations(joined_runs))
+            split_obs.append(Observations(joined_runs))
             joined_runs = []
             prev_run_join = False
             if i == len(observations)-2:
                 last = True
 
         if last is True and prev_run_join is True:
-            splitted_obs.append(Observations(joined_runs))
+            split_obs.append(Observations(joined_runs))
 
         if last is True and prev_run_join is False:
-            splitted_obs.append(Observations([observations[i+1]]))
+            split_obs.append(Observations([observations[i+1]]))
 
-    return splitted_obs
+    return split_obs
 
 
 def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
     """
     Obtain the time intervals required to divide a run into subruns with a gti of interval_subrun,
-    intervals in the extremes of the run account the extra or infratime of the run to obtain an
+    intervals in the extremes of the run account the extra or infra-time of the run to obtain an
     integer number of subruns.
         
-    parameters
+    Parameters
     ----------
-    interval_subrun: astopy.Quantity
+    interval_subrun: astropy.Quantity
         The number of time we want the subruns to have.
     time_interval_obs: list
         List of [t_start,tstop] for each observation object.
     atol: float
         Resolution.
 
-    return
-    ------
+    Returns
+    -------
     time_intervals: list
         list of [tstart,tstop] of each subrun.   
         
@@ -230,8 +230,10 @@ def fraction_outside_interval(x, xmin, xmax):
         Minimum value.
     xmax: float or int
         Maximum value.
+
     Returns
     -------
+    Sum normalized fraction outside xmin-xmax.
     """
     frac_sup = np.max(x) - xmax
     frac_inf = xmin - np.min(x)

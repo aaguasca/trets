@@ -38,15 +38,15 @@ def intrarun(
     """
     Compute the integral fluxes using subrun events.
 
-    parameters
+    Parameters
     ----------
     time_bin: astropy.Quantity
         The number of time we want the subruns to have.
-    E1: astopy.Units
-        Minimum energy bound used to compute the integral flux. It must be conside with one center
+    E1: astropy.Units
+        Minimum energy bound used to compute the integral flux. It must be considered with one center
         in e_reco.
-    E2: astopy.Units
-        Maximum energy bound used to compute the integral flux. It must be conside with one center
+    E2: astropy.Units
+        Maximum energy bound used to compute the integral flux. It must be considered with one center
         in e_reco.       
     e_reco:
         Reconstructed energy axis used in the SpectrumDatasetOnOff object
@@ -59,10 +59,10 @@ def intrarun(
     bkg_maker_reflected:
         Background maker to estimate the background.
     best_fit_spec_model:
-        Assumed Skymodel of the source. Only spectral model.
+        Assumed SkyModel of the source. Only spectral model.
 
-    return
-    ------
+    Returns
+    -------
     lc_subrun: LightCurve
         Light curve object.    
     """

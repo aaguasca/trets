@@ -147,7 +147,7 @@ class BayesianProbability:
         Returns
         -------
         C_0 : int
-            The normalized coefficient for the 0-th ON event. i.e. the the probability for the
+            The normalized coefficient for the 0-th ON event. i.e. the probability for the
             n events to be background events.
         
         """
@@ -216,7 +216,7 @@ class BayesianProbability:
     
     def detection_significance(self):
         """
-        Compute the detection significance. i.e. the how confidence we are 
+        Compute the detection significance. i.e. how confidence we are (probability)
         that the data departs from an only background data (mu_s=0)
         
         Parameters

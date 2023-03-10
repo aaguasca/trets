@@ -38,7 +38,7 @@ def normalised_excess_variance(
         Else, the normalised excess variance is computed.
         Default value is False.
         
-    Results
+    Returns
     -------
     p_value: float
         p-value against the null hypothesis.

@@ -25,6 +25,7 @@ def temporal_resolution_hist(ax, flux_points, temporal_units):
         time_min, time_max, is_ul.
     temporal_units: astropy.units
         Units to express the x axis
+
     Returns
     -------
     ax:

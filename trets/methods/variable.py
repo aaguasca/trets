@@ -65,15 +65,15 @@ class TRETS:
         TRETS algorithm. Computes the light curve between energies [E1,E2] where in each integral flux, 
         the number of events in that time interval gives a detection significance of the source of 
         TS="sig_threshold"**2 and the fit statistics is higher than "sqrt_TS_flux_UL_threshold". 
-        The flux point is computed assuming a certain Skymodel "best_fit_spec_model" (spectral model).
+        The flux point is computed assuming a certain SkyModel "best_fit_spec_model" (spectral model).
     
-        parameters
+        Parameters
         ----------
-        E1: astopy.units
-            Minimum energy bound used to compute the integral flux. It must be conside with one center
+        E1: astropy.units
+            Minimum energy bound used to compute the integral flux. It must be considered with one center
             in e_reco.
-        E2: astopy.units
-            Maximum energy bound used to compute the integral flux. It must be conside with one center
+        E2: astropy.units
+            Maximum energy bound used to compute the integral flux. It must be considered with one center
             in e_reco.       
         e_reco:
             Reconstructed energy axis used in the SpectrumDatasetOnOff object
@@ -102,12 +102,12 @@ class TRETS:
         bkg_maker_reflected:
             Background maker to estimate the background.
         best_fit_spec_model:
-            Assumed Skymodel of the source. Only spectral model.
+            Assumed SkyModel of the source. Only spectral model.
         bool_bayesian: boolean
             If true, use bayesian approach to compute the detection significance
 
-        return
-        ------
+        Returns
+        -------
         lc_subrun: LightCurve
             Light curve object.
 
