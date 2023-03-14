@@ -46,6 +46,7 @@ class TRETS:
 
     @conditional_ray('is_ray')
     def TRETS_algorithm(
+        is_simu,
         E1,
         E2,
         e_reco,
@@ -113,17 +114,27 @@ class TRETS:
             Detection TS of the source.
 
         """        
-    
-        geom = RegionGeom.create(region=on_region, axes=[e_reco])
 
-        dataset_empty = SpectrumDataset.create(
-            geom, energy_axis_true=e_true
-        )
-        dataset_maker = SpectrumDatasetMaker(
-            containment_correction=False, selection=["counts", "exposure", "edisp"]
-        )        
+        if not is_simu:
+            print("Running TRETS at DL3 level (real data)")
+            geom = RegionGeom.create(region=on_region, axes=[e_reco])
 
-        print("Run IDs considered in this execution: ", observations.ids)
+            dataset_empty = SpectrumDataset.create(
+                geom, energy_axis_true=e_true
+            )
+            dataset_maker = SpectrumDatasetMaker(
+                containment_correction=False, selection=["counts", "exposure", "edisp"]
+            )
+            observations_id = observations.ids
+
+        else:
+            print("Running TRETS at DL4 level (simulations)")
+            print("DL3 specifications {e_reco, e_true, on_region, time_bin, bkg_maker_reflected} will not be "+\
+                  "considered... Using the Dataset objects specifications!")
+            observations_id = observations.names
+
+        print(" ")
+        print("Run IDs considered in this execution: ", observations_id)
 
         # list where the flux is saved
         lc_list = []
@@ -151,31 +162,44 @@ class TRETS:
             n_on_thd = 10
             n_off_thd = 10
 
-        for i, obs in zip(observations.ids, observations):
+        for id, obs in zip(observations_id, observations):
      
             if print_check != 0:
                 print(" ")
                 print(" ")
-                print("OBSERVATION ID: %i. Total number of events: %i" % (obs.obs_id, len(obs.events.table)))
-                print("OBS gti Tstart (TT):", observations[0].gti.time_start.tt.iso)
-                print("OBS gti Tstop (TT):", observations[0].gti.time_stop.tt.iso)
-                print("first event time (TT)", (observations[0].gti.time_ref.tt + \
-                        Quantity(observations[0].events.table["TIME"][0], "second")).iso)
-                print("last event time (TT)", (observations[0].gti.time_ref.tt + \
-                        Quantity(observations[0].events.table["TIME"][-1], "second")).iso)
-                event_id = obs.events.table["EVENT_ID"].data
-            event_time = obs.events.table["TIME"].data
+                if not is_simu:
+                    print("OBSERVATION ID: %i. Total number of events: %i" % (id, len(obs.events.table)))
+                    print("OBS gti Tstart (TT):", observations[0].gti.time_start.tt.iso)
+                    print("OBS gti Tstop (TT):", observations[0].gti.time_stop.tt.iso)
+                    print("first event time (TT)", (observations[0].gti.time_ref.tt + \
+                            Quantity(observations[0].events.table["TIME"][0], "second")).iso)
+                    print("last event time (TT)", (observations[0].gti.time_ref.tt + \
+                            Quantity(observations[0].events.table["TIME"][-1], "second")).iso)
+                    event_id = obs.events.table["EVENT_ID"].data
+                else:
+                    print(f"OBSERVATION ID: {id}.")
 
-            obs_tini = obs.gti.time_start.tt.mjd * u.d
-            obs_tstop = obs.gti.time_stop.tt.mjd * u.d
-            dt = obs_tstop - obs_tini
-            list_t = np.linspace(0, dt[0].to_value("s"), int(np.ceil(dt.to_value("s")/time_bin.to_value("s"))))
+            if not is_simu:
+                event_time = obs.events.table["TIME"].data
 
-            # TODO: investigate why using obs.gti.time_start.tt.mjd and removing event_time[0] I loose events
-            time_array = obs.gti.time_ref.tt + Quantity(event_time[0] + list_t, "s")
+                obs_tini = obs.gti.time_start.tt.mjd * u.d
+                obs_tstop = obs.gti.time_stop.tt.mjd * u.d
+                dt = obs_tstop - obs_tini
+                list_t = np.linspace(0, dt[0].to_value("s"), int(np.ceil(dt.to_value("s")/time_bin.to_value("s"))))
+
+                # TODO: investigate why using obs.gti.time_start.tt.mjd and removing event_time[0] I loose events
+                time_array = obs.gti.time_ref.tt + Quantity(event_time[0] + list_t, "s")
+
+            #for simu, the events in the dataset do not have trigger time info
+            else:
+                #dummpy time_array
+                time_array = np.array([0, 1], dtype=float)
 
             if print_check != 0:
-                print("Time bin width used", list_t[1]-list_t[0], " s")
+                if not is_simu:
+                    print("Time bin width used", list_t[1]-list_t[0], " s")
+                else:
+                    print("Time bin width used", obs.gti.time_delta[0].to_value("s"), " s")
                 print("Total number of time bins edges:", len(time_array))
 
             arg_start_time = 0
@@ -187,24 +211,29 @@ class TRETS:
                     arg_start_time = cont_t
                 arg_stop_time = cont_t+1
 
-                # filter the observation
-                filters = ObservationFilter(
-                    time_filter=Time(
-                        [time_array[arg_start_time], time_array[arg_stop_time]]
+                if not is_simu:
+                    # filter the observation
+                    filters = ObservationFilter(
+                        time_filter=Time(
+                            [time_array[arg_start_time], time_array[arg_stop_time]]
+                        )
                     )
-                )
-                
-                # copy the observation because the filter deletes all events out of the ID range specified
-                subobs = copy.deepcopy(obs)
-                # apply the filter
-                subobs.obs_filter = filters
 
-                t_0 = time_array[arg_start_time]
-                t_end = time_array[arg_stop_time]
+                    # copy the observation because the filter deletes all events out of the ID range specified
+                    subobs = copy.deepcopy(obs)
+                    # apply the filter
+                    subobs.obs_filter = filters
 
-                # data reduction
-                dataset = dataset_maker.run(dataset_empty.copy(name=str(arg_start_time)), subobs)
-                dataset_on_off = bkg_maker_reflected.run(dataset, subobs)
+                    t_0 = time_array[arg_start_time]
+                    t_end = time_array[arg_stop_time]
+
+                    # data reduction
+                    dataset = dataset_maker.run(dataset_empty.copy(name=str(arg_start_time)), subobs)
+                    dataset_on_off = bkg_maker_reflected.run(dataset, subobs)
+
+                # no need to filter a dataset. Copy the simulated dataset and consider all events
+                else:
+                    dataset_on_off = obs.copy()
 
                 # we do not have data from previous runs
                 if len(prev_dataset) == 0:
@@ -263,30 +292,33 @@ class TRETS:
 
                 # !!!!!!!!CHECKS!!!!!!!!
                 if print_check == 2:
+                    print(" ")
+                    print(" ")
+                    print(arg_start_time, " to ", arg_stop_time, ", total args:", len(time_array) - 1)
+                    print("OBSERVATION ID:", id)
+                    if not is_simu:
                     # també es pot comprovat sumant el temps "s" de la taula amb gti de la dataset
-                    print(" ")
-                    print(" ")
-                    print(arg_start_time, " to ", arg_stop_time, ", total args:", len(time_array)-1)
-                    print("OBSERVATION ID:", obs.obs_id)
-                    print(f"start time observation {i}, {obs.gti.time_start.tt.iso}")
-                    print(f"stop time observation {i}, {obs.gti.time_stop.tt.iso}")
-                    print("arg first subobs event in observation",
-                            np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0])
-                    print("arg first subobs event in observation",
-                            np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0])
-                    print("time first event", t_0.tt.iso)
-                    print("-check gti start subobs-", subobs.gti.time_start.tt.iso)
-                    print("time last event", t_end.tt.iso)
-                    print("-check gti end subobs-", subobs.gti.time_stop.tt.iso)
+                        print(f"start time observation {id}, {obs.gti.time_start.tt.iso}")
+                        print(f"stop time observation {id}, {obs.gti.time_stop.tt.iso}")
+                        print("arg first subobs event in observation",
+                                np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0])
+                        print("arg first subobs event in observation",
+                                np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0])
+                        print("time first event", t_0.tt.iso)
+                        print("-check gti start subobs-", subobs.gti.time_start.tt.iso)
+                        print("time last event", t_end.tt.iso)
+                        print("-check gti end subobs-", subobs.gti.time_stop.tt.iso)
+                        print("dataset gti Tstart:", dataset.gti.time_start.tt.iso)
+                        print("dataset gti Tstop:", dataset.gti.time_stop.tt.iso)
                     print("dataset_on_off gti Tstart:", dataset_on_off.gti.time_start.tt.iso)
                     print("dataset_on_off gti Tstop:", dataset_on_off.gti.time_stop.tt.iso)
                     print("datasets_ONOFF gti Tstart:", datasets_ONOFF.gti.time_start.tt.iso)
                     print("datasets_ONOFF gti Tstop:", datasets_ONOFF.gti.time_stop.tt.iso)
-                    print("dataset gti Tstart:", dataset.gti.time_start.tt.iso)
-                    print("dataset gti Tstop:", dataset.gti.time_stop.tt.iso)
-                    print("first event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[0])][0, 0])
-                    print("last event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[-1])][0, 0])
-                    print("num events subobs:", len(subobs.events.table["EVENT_ID"]))
+
+                    if not is_simu:
+                        print("first ev<ent ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[0])][0, 0])
+                        print("last event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[-1])][0, 0])
+                        print("num even>ts subobs:", len(subobs.events.table["EVENT_ID"]))
                     print("num events dataset:", 
                             datasets_ONOFF.counts_off.data.sum()+datasets_ONOFF.counts.data.sum())
                     print("######################")
@@ -306,22 +338,22 @@ class TRETS:
                     if arg_stop_time == len(time_array)-1:
 
                         # there is another observation in the observation container
-                        if np.argwhere(np.array(observations.ids) == i)[0, 0] < len(observations)-1:
+                        if np.argwhere(np.array(observations_id) == id)[0, 0] < len(observations)-1:
 
                             # time between two observations lower than the threshold
-                            if (observations[int(np.argwhere(np.array(observations.ids) == i)[0, 0]+1)].gti.time_start.tt - \
+                            if (observations[int(np.argwhere(np.array(observations_id) == id)[0, 0]+1)].gti.time_start.tt - \
                                 obs.gti.time_stop.tt).to(thres_time_twoobs.unit) < thres_time_twoobs:
 
-                                save_dataset_on_off = dataset_on_off.copy(name="counts left obsid %s" % i)
+                                save_dataset_on_off = dataset_on_off.copy(name="counts left obsid %s" % id)
                                 # safe the dataset_on_off to keep it for the next observation loop
                                 prev_dataset.append(save_dataset_on_off)
-                                prev_events = len(subobs.events.table["EVENT_ID"])
-
+                                prev_events = Datasets(prev_dataset).stack_reduce().counts_off.data.sum() + \
+                                              Datasets(prev_dataset).stack_reduce().counts.data.sum()
                                 sig_ul = sig
                                 keep_dataset_bool = True
 
                                 if print_check == 2:
-                                    print("+++++++++ Append dataset from obs %s in the dataset container +++++++++" % i)
+                                    print("+++++++++ Append dataset from obs %s in the dataset container +++++++++" % id)
 
                             else:  # time between two observations higher than the threshold
                                 sig_ul = sig
@@ -355,11 +387,16 @@ class TRETS:
 
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
-                                print("events' bin: %.0f to %.0f.  Sig=%.1f -> UL!" % (
-                                    np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
-                                    np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
-                                    sig_ul)
-                                )
+                                if not is_simu:
+                                    print("events' bin: %.0f to %.0f.  Sig=%.1f -> UL!" % (
+                                        np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
+                                        np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
+                                        sig_ul)
+                                    )
+                                else:
+                                    print("events' in simu dataset: 0 to 1.  Sig=%.1f -> UL!" % (
+                                        sig_ul)
+                                    )
                                 print("---------------------------------------------------------------------------")
 
                             # !!!!!!!!CHECKS!!!!!!!!
@@ -396,23 +433,25 @@ class TRETS:
                         if arg_stop_time == len(time_array)-1:
                             bool_last_even = False
                             # there is another observation in the observation container
-                            if np.argwhere(np.array(observations.ids) == i)[0, 0] < len(observations)-1:
+                            if np.argwhere(np.array(observations_id) == id)[0, 0] < len(observations)-1:
 
                                 # time between two observations lower than the threshold
-                                if (observations[int(np.argwhere(np.array(observations.ids) == i)[0, 0]+1)].gti.time_start.tt - \
+                                if (observations[int(np.argwhere(np.array(observations_id) == id)[0, 0]+1)].gti.time_start.tt - \
                                     obs.gti.time_stop.tt).to(thres_time_twoobs.unit) < thres_time_twoobs:
 
-                                    save_dataset_on_off = dataset_on_off.copy(name="counts left obsid %s" % i)
+                                    save_dataset_on_off = dataset_on_off.copy(name="counts left obsid %s" % id)
                                     # safe the dataset_on_off to keep it for the next observation loop
                                     prev_dataset.append(save_dataset_on_off)
-                                    prev_events = len(subobs.events.table["EVENT_ID"])
+
+                                    prev_events = Datasets(prev_dataset).stack_reduce().counts_off.data.sum() + \
+                                                  Datasets(prev_dataset).stack_reduce().counts.data.sum()
 
                                     sqrt_ts_flux_ul = sqrt_ts_flux
                                     sig_ul = sig
                                     keep_dataset_bool = True
 
                                     if print_check == 2:
-                                        print("+++++++++ Append dataset from obs %s in the dataset container +++++++++" % i)
+                                        print("+++++++++ Append dataset from obs %s in the dataset container +++++++++" % id)
 
                                 else:  # time between two observations higher than the threshold
                                     sqrt_ts_flux_ul = sqrt_ts_flux
@@ -440,10 +479,14 @@ class TRETS:
 
                                 if print_check == 1 or print_check == 2:
                                     print("---------------------------------------------------------------------------")
-                                    print("events' bin: %.0f to %.0f. detect_sig=%.1f, sqrt(TS)_flux=%.1f ->UL!" % (
-                                        np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
-                                        np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
-                                        sig_ul, sqrt_ts_flux_ul))
+                                    if not is_simu:
+                                        print("events' bin: %.0f to %.0f. detect_sig=%.1f, sqrt(TS)_flux=%.1f ->UL!" % (
+                                            np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
+                                            np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
+                                            sig_ul, sqrt_ts_flux_ul))
+                                    else:
+                                        print("events' bin: 0 to 1. detect_sig=%.1f, sqrt(TS)_flux=%.1f ->UL!" % (
+                                            sig_ul, sqrt_ts_flux_ul))
                                     print("---------------------------------------------------------------------------")
 
                                 # !!!!!!!!CHECKS!!!!!!!!
@@ -472,21 +515,31 @@ class TRETS:
                             prev_dataset = Datasets()
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
-                                print("events' bin: %i to %i with %i events from previous obs. detect_sig=%.1f, sqrt(TS)_flux=%.1f" \
-                                                  % (
-                                                      np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
-                                                      np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
-                                                      prev_events, sig, sqrt_ts_flux
-                                                  )
-                                )
-
+                                if not is_simu:
+                                    print("events' bin: %i to %i with %i events from previous obs. detect_sig=%.1f, sqrt(TS)_flux=%.1f" \
+                                                      % (
+                                                          np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
+                                                          np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
+                                                          prev_events, sig, sqrt_ts_flux
+                                                      )
+                                    )
+                                else:
+                                    print("events' bin: 0 to 1 with %i events from previous obs. detect_sig=%.1f, sqrt(TS)_flux=%.1f" \
+                                                      % (
+                                                          prev_events, sig, sqrt_ts_flux
+                                                      )
+                                    )
                         else:
                             if print_check == 1 or print_check == 2:
-                                print("---------------------------------------------------------------------------")                            
-                                print("events' bin: %.0f to %.0f. detect_sig=%.1f, sqrt(TS)_flux=%.1f" % (
-                                    np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
-                                    np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
-                                    sig, sqrt_ts_flux))
+                                print("---------------------------------------------------------------------------")
+                                if not is_simu:
+                                    print("events' bin: %.0f to %.0f. detect_sig=%.1f, sqrt(TS)_flux=%.1f" % (
+                                        np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
+                                        np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
+                                        sig, sqrt_ts_flux))
+                                else:
+                                    print("events' bin: 0 to 1. detect_sig=%.1f, sqrt(TS)_flux=%.1f" % (
+                                        sig, sqrt_ts_flux))
                         # !!!!!!!!CHECKS!!!!!!!!
                         if print_check == 2:
                             print("---------------------------------------------------------------------------")

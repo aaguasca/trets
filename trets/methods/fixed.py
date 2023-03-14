@@ -24,6 +24,7 @@ __all__ = ['intrarun']
 
 
 def intrarun(
+    is_simu,
     E1,
     E2,
     e_reco,
@@ -67,17 +68,18 @@ def intrarun(
         Light curve object.    
     """
 
-    geom = RegionGeom.create(region=on_region, axes=[e_reco])
+    if not is_simu:
+        geom = RegionGeom.create(region=on_region, axes=[e_reco])
 
-    # create the dataset container object of the spectrum on the ON region
-    dataset_empty = SpectrumDataset.create( 
-        geom, energy_axis_true=e_true
-    )
-    
-    # maker to produce data reduction to DL4
-    dataset_maker = SpectrumDatasetMaker( 
-        containment_correction=False, selection=["counts", "exposure", "edisp"]  # make this maps
-    )       
+        # create the dataset container object of the spectrum on the ON region
+        dataset_empty = SpectrumDataset.create(
+            geom, energy_axis_true=e_true
+        )
+
+        # maker to produce data reduction to DL4
+        dataset_maker = SpectrumDatasetMaker(
+            containment_correction=False, selection=["counts", "exposure", "edisp"]  # make this maps
+        )
 
     # prepare again the Dataset
     datasets_short = Datasets()
@@ -102,13 +104,21 @@ def intrarun(
     else:
         # only to match observations
         short_observations = observations
-        time_intervals = observations.ids
+        if not is_simu:
+            time_intervals = observations.ids
+        else:
+            time_intervals = observations.names
 
     # loop for each run
     for obs_id, observation in zip(np.arange(len(time_intervals)), short_observations):
 
-        dataset = dataset_maker.run(dataset_empty.copy(name=str(obs_id)), observation) 
-        dataset_on_off = bkg_maker_reflected.run(dataset, observation)     
+        if not is_simu:
+            dataset = dataset_maker.run(dataset_empty.copy(name=str(obs_id)), observation)
+            dataset_on_off = bkg_maker_reflected.run(dataset, observation)
+        # No need to do the DL3->DL4 stage
+        else:
+            dataset_on_off = observation
+
         # collect the SpectrumDatasetOnOff containers of all the observations
         datasets_short.append(dataset_on_off)
 

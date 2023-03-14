@@ -37,22 +37,27 @@ class lightcurve_methods:
     - runwise
     """
 
-    def __init__(self, script_name, **kwargs):
+    def __init__(self, script_name, is_simu, **kwargs):
         """
         """
         # name of the method used to obtain the light curve (TRETS, intrarun_lc or runwise_lc)
         self.script_name = script_name
-        
+        # if the dataset are simulations
+        self.is_simu = is_simu
+
+        #TODO: Allow the return the dictionary with the keys required to run the method (option)
+        #TODO: Create method that reads the returned dictionary after instantiate the class
         allowed_keys = self._allowed_keys_script()
         self.__dict__.update((key, value) for key, value in kwargs.items() if key in allowed_keys)
 
-        print(self.e_inf_flux.to(self.e_reco.edges.unit).value,self.e_reco.edges.value)
+        #TODO: move these checks to the methods
+        if not is_simu:
+            print(self.e_inf_flux.to(self.e_reco.edges.unit).value,self.e_reco.edges.value)
+            assert round(self.e_inf_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
+            assert round(self.e_sup_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
 
-        assert round(self.e_inf_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
-        assert round(self.e_sup_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
-
-        if self.script_name == "TRETS":
-            assert len(self.e_reco.center) == 3
+            if self.script_name == "TRETS":
+                assert len(self.e_reco.center) == 3
 
     def _allowed_keys_script(self):
         """
@@ -102,6 +107,19 @@ class lightcurve_methods:
                 "bkg_maker_reflected",        # ""
                 "sky_model"                   # ""
             }
+
+        if not self.is_simu:
+            del_notsimu_keys={
+                "e_reco",
+                "e_true",
+                "on_region",
+                "bkg_maker_reflected",
+            }
+            if self.script_name == "TRETS" or self.script_name == "intrarun":
+                del_notsimu_keys["time_bin"] = None
+
+            for key in del_notsimu_keys:
+                del allowed_keys[key]
             
         return allowed_keys            
             
@@ -125,22 +143,42 @@ class lightcurve_methods:
 
                 futures_list = []
                 for obs in split_obs:
-                    futures = parallelization_TRETS.TRETS_algorithm().remote(
-                        E1=self.e_inf_flux,
-                        E2=self.e_sup_flux,
-                        e_reco=self.e_reco,
-                        e_true=self.e_true,
-                        on_region=self.on_region,
-                        sig_threshold=self.sig_threshold,
-                        sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
-                        print_check=self.print_check,
-                        thres_time_twoobs=self.thres_time_twoobs,
-                        time_bin=self.time_bin,
-                        observations=obs,
-                        bkg_maker_reflected=self.bkg_maker_reflected,
-                        best_fit_spec_model=self.sky_model,
-                        bool_bayesian=self.bool_bayesian
-                    )
+                    if not self.is_simu:
+                        futures = parallelization_TRETS.TRETS_algorithm().remote(
+                            is_simu=self.is_simu,
+                            E1=self.e_inf_flux,
+                            E2=self.e_sup_flux,
+                            e_reco=self.e_reco,
+                            e_true=self.e_true,
+                            on_region=self.on_region,
+                            sig_threshold=self.sig_threshold,
+                            sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
+                            print_check=self.print_check,
+                            thres_time_twoobs=self.thres_time_twoobs,
+                            time_bin=self.time_bin,
+                            observations=obs,
+                            bkg_maker_reflected=self.bkg_maker_reflected,
+                            best_fit_spec_model=self.sky_model,
+                            bool_bayesian=self.bool_bayesian
+                        )
+                    else:
+                        futures = parallelization_TRETS.TRETS_algorithm().remote(
+                            is_simu=self.is_simu,
+                            E1=self.e_inf_flux,
+                            E2=self.e_sup_flux,
+                            e_reco=None,
+                            e_true=None,
+                            on_region=None,
+                            sig_threshold=self.sig_threshold,
+                            sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
+                            print_check=self.print_check,
+                            thres_time_twoobs=self.thres_time_twoobs,
+                            time_bin=None,
+                            observations=obs,
+                            bkg_maker_reflected=None,
+                            best_fit_spec_model=self.sky_model,
+                            bool_bayesian=self.bool_bayesian
+                        )
                     futures_list.append(futures)
             
                 light_curve = []
@@ -169,23 +207,42 @@ class lightcurve_methods:
                 algorithm_TRETS = TRETS(parallelization=self.is_ray)
                 # light_curve,TS_column=TRETS(
                 TRETS_local = algorithm_TRETS.TRETS_algorithm()
-                light_curve, TS_column = TRETS_local(
-                    E1=self.e_inf_flux,
-                    E2=self.e_sup_flux,
-                    e_reco=self.e_reco,
-                    e_true=self.e_true,
-                    on_region=self.on_region,
-                    sig_threshold=self.sig_threshold,
-                    sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
-                    print_check=self.print_check,
-                    thres_time_twoobs=self.thres_time_twoobs,
-                    time_bin=self.time_bin,
-                    observations=self.observations,
-                    bkg_maker_reflected=self.bkg_maker_reflected,
-                    best_fit_spec_model=self.sky_model,
-                    bool_bayesian=self.bool_bayesian
-                )
-                               
+                if not self.is_simu:
+                    light_curve, TS_column = TRETS_local(
+                        is_simu=self.is_simu,
+                        E1=self.e_inf_flux,
+                        E2=self.e_sup_flux,
+                        e_reco=self.e_reco,
+                        e_true=self.e_true,
+                        on_region=self.on_region,
+                        sig_threshold=self.sig_threshold,
+                        sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
+                        print_check=self.print_check,
+                        thres_time_twoobs=self.thres_time_twoobs,
+                        time_bin=self.time_bin,
+                        observations=self.observations,
+                        bkg_maker_reflected=self.bkg_maker_reflected,
+                        best_fit_spec_model=self.sky_model,
+                        bool_bayesian=self.bool_bayesian
+                    )
+                else:
+                    light_curve, TS_column = TRETS_local(
+                        is_simu=self.is_simu,
+                        E1=self.e_inf_flux,
+                        E2=self.e_sup_flux,
+                        e_reco=None,
+                        e_true=None,
+                        on_region=None,
+                        sig_threshold=self.sig_threshold,
+                        sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
+                        print_check=self.print_check,
+                        thres_time_twoobs=self.thres_time_twoobs,
+                        time_bin=None,
+                        observations=self.observations,
+                        bkg_maker_reflected=None,
+                        best_fit_spec_model=self.sky_model,
+                        bool_bayesian=self.bool_bayesian
+                    )
                 # light_curve,TS_column=TRETS_local()
                 
                 light_curve.meta.update({"TS-value": TS_column})
@@ -208,30 +265,60 @@ class lightcurve_methods:
 #                 p.join()
     
         if self.script_name == "intrarun":
-            light_curve = intrarun(
-                E1=self.e_inf_flux,
-                E2=self.e_sup_flux,
-                e_reco=self.e_reco,
-                e_true=self.e_true,
-                time_bin=self.time_bin,
-                on_region=self.on_region,
-                observations=self.observations,
-                bkg_maker_reflected=self.bkg_maker_reflected,
-                best_fit_spec_model=self.sky_model
-            )
-            
+            if not self.is_simu:
+                light_curve = intrarun(
+                    is_simu=self.is_simu,
+                    E1=self.e_inf_flux,
+                    E2=self.e_sup_flux,
+                    e_reco=self.e_reco,
+                    e_true=self.e_true,
+                    time_bin=self.time_bin,
+                    on_region=self.on_region,
+                    observations=self.observations,
+                    bkg_maker_reflected=self.bkg_maker_reflected,
+                    best_fit_spec_model=self.sky_model
+                )
+            else:
+                print("Dataset-wise light curve (doing the same as runwise method with option is_simu = True).")
+                light_curve = intrarun(
+                    is_simu=self.is_simu,
+                    E1=self.e_inf_flux,
+                    E2=self.e_sup_flux,
+                    e_reco=None,
+                    e_true=None,
+                    time_bin=None,
+                    on_region=None,
+                    observations=self.observations,
+                    bkg_maker_reflected=None,
+                    best_fit_spec_model=self.sky_model
+                )
+
         if self.script_name == "runwise":
-            light_curve = intrarun(
-                E1=self.e_inf_flux,
-                E2=self.e_sup_flux,
-                e_reco=self.e_reco,
-                e_true=self.e_true,
-                on_region=self.on_region,
-                observations=self.observations,
-                bkg_maker_reflected=self.bkg_maker_reflected,
-                best_fit_spec_model=self.sky_model,
-            )
-    
+            if not self.is_simu:
+                light_curve = intrarun(
+                    is_simu=self.is_simu,
+                    E1=self.e_inf_flux,
+                    E2=self.e_sup_flux,
+                    e_reco=self.e_reco,
+                    e_true=self.e_true,
+                    on_region=self.on_region,
+                    observations=self.observations,
+                    bkg_maker_reflected=self.bkg_maker_reflected,
+                    best_fit_spec_model=self.sky_model,
+                )
+            else:
+                light_curve = intrarun(
+                    is_simu=self.is_simu,
+                    E1=self.e_inf_flux,
+                    E2=self.e_sup_flux,
+                    e_reco=None,
+                    e_true=None,
+                    on_region=None,
+                    observations=self.observations,
+                    bkg_maker_reflected=None,
+                    best_fit_spec_model=self.sky_model,
+                )
+
         print("Duration: ", int(time.time()-t_start)*u.s)
         return light_curve
 
