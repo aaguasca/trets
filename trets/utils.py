@@ -10,6 +10,10 @@ import math
 
 __all__ = [
     "get_intervals",
+    "get_TRETS_table",
+    "get_TRETS_significance_threshold",
+    "get_TRETS_timebin",
+    "get_TRETS_flux_significance"
     "conditional_ray",
     "split_observations",
     "subrun_split",
@@ -49,6 +53,43 @@ def get_intervals(data, n):
         selected_data = np.concatenate((selected_data, [data[-1]]))
     return selected_data
 
+def get_TRETS_table(flux_points):
+    """
+    Add the significance detection in the flux_points table to
+    the flux_points object.
+    """
+    tab = flux_points.to_table(sed_type="flux", format="lightcurve")
+    sig_detection_column = get_TRETS_flux_significance(flux_points)
+    tab["sig_detection"] = sig_detection_column
+    return tab
+
+def get_TRETS_significance_threshold(flux_points):
+    """
+    Obtain the significance threshold used to compute TRETS
+    flux points in flux_points object.
+    """
+    return flux_points.meta["sig-thd"]
+
+def get_TRETS_flux_significance(flux_points):
+    """
+    Obtain the significance detection for each time bin used to
+    compute the flux points in flux_points object.
+    """
+    return flux_points.meta["sig-column"]
+
+def get_TRETS_timebin(flux_points):
+    """
+    Obtain the time bin interval used to compute TRETS
+    flux points in flux_points object.
+    """
+    return flux_points.meta["time-bin"]
+
+def get_TRETS_flux_significance_thd(flux_points):
+    """
+    Obtain the flux significance threshold used to compute TRETS
+    flux points in flux_points object.
+    """
+    return flux_points.meta["sig-flux-thd"]
 
 def conditional_ray(attr):
     """

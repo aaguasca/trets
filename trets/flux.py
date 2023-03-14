@@ -182,16 +182,16 @@ class lightcurve_methods:
                     futures_list.append(futures)
             
                 light_curve = []
-                TS_column = []
+                sig_column = []
                 for futures in futures_list:
                     lc, TS_col = ray.get(futures)
                     light_curve.append(lc)
-                    TS_column.append(TS_col)
+                    sig_column.append(TS_col)
 
                 ray.shutdown()
-                TS_column = vstack(TS_column)
+                sig_column = vstack(sig_column)
                 light_curve = vstack(light_curve)
-                light_curve.meta.update({"TS-value": TS_column})
+                light_curve.meta.update({"sig_detection": sig_column})
                 light_curve = FluxPoints.from_table(
                     light_curve,
                     reference_model=self.sky_model,
@@ -205,10 +205,10 @@ class lightcurve_methods:
   
                 # TRETS_local=TRETS(
                 algorithm_TRETS = TRETS(parallelization=self.is_ray)
-                # light_curve,TS_column=TRETS(
+                # light_curve,sig_column=TRETS(
                 TRETS_local = algorithm_TRETS.TRETS_algorithm()
                 if not self.is_simu:
-                    light_curve, TS_column = TRETS_local(
+                    light_curve, sig_column = TRETS_local(
                         is_simu=self.is_simu,
                         E1=self.e_inf_flux,
                         E2=self.e_sup_flux,
@@ -226,7 +226,7 @@ class lightcurve_methods:
                         bool_bayesian=self.bool_bayesian
                     )
                 else:
-                    light_curve, TS_column = TRETS_local(
+                    light_curve, sig_column = TRETS_local(
                         is_simu=self.is_simu,
                         E1=self.e_inf_flux,
                         E2=self.e_sup_flux,
@@ -243,9 +243,9 @@ class lightcurve_methods:
                         best_fit_spec_model=self.sky_model,
                         bool_bayesian=self.bool_bayesian
                     )
-                # light_curve,TS_column=TRETS_local()
+                # light_curve,sig_column=TRETS_local()
                 
-                light_curve.meta.update({"TS-value": TS_column})
+                light_curve.meta.update({"sig_detection": sig_column})
                 light_curve = FluxPoints.from_table(
                     light_curve,
                     reference_model=self.sky_model,

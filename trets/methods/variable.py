@@ -558,4 +558,10 @@ class TRETS:
         # add the detection significance value
         sig_column = Table(data=[sig_array], names=["sig_detection"], dtype=[np.float32])
         light_curve.meta.update({"sig-thd": sig_threshold})
+        light_curve.meta.update({"sig-flux-thd": sqrt_TS_flux_UL_threshold})
+        if not is_simu:
+            light_curve.meta.update({"time-bin": time_bin})
+        else:
+            light_curve.meta.update({"time-bin": obs.gti.time_delta[0].to("s")})
+
         return light_curve.copy(), sig_column.copy()

@@ -3,7 +3,10 @@
 
 import matplotlib.pyplot as plt
 import astropy.units as u
-
+from .utils import (
+    get_TRETS_table,
+    get_TRETS_significance_threshold,
+)
 __all__ = [
     "temporal_resolution_hist",
     "significance_distribution",
@@ -32,13 +35,15 @@ def temporal_resolution_hist(ax, flux_points, temporal_units):
         Axis
     """
 
-    # flux_points=flux_points.to_table(sed_type="flux", format="lightcurve")
-    mask_ul = flux_points["is_ul"] is True
+    flux_points_tab = flux_points.to_table(sed_type="flux", format="lightcurve")
+    mask_ul = flux_points_tab["is_ul"] is True
 
     # flux points
-    time_array = (flux_points["time_max"][~mask_ul.reshape(-1)]-flux_points["time_min"][~mask_ul.reshape(-1)])*u.day
+    time_array = (flux_points_tab["time_max"][~mask_ul.reshape(-1)]- \
+                  flux_points_tab["time_min"][~mask_ul.reshape(-1)])*u.day
     # UL
-    time_array_ul = (flux_points["time_max"][mask_ul.reshape(-1)]-flux_points["time_min"][mask_ul.reshape(-1)])*u.day
+    time_array_ul = (flux_points_tab["time_max"][mask_ul.reshape(-1)]- \
+                     flux_points_tab["time_min"][mask_ul.reshape(-1)])*u.day
 
     time_array = time_array.to_value(temporal_units)
     n = ax.hist(time_array, bins=50, label="Flux point")
@@ -70,16 +75,17 @@ def significance_distribution(ax, flux_points):
         Axis
     """
 
-    # flux_points=flux_points.to_table(sed_type="flux", format="lightcurve")
-    mask_ul = flux_points["is_ul"] is True
+    flux_points_tab = get_TRETS_table(flux_points)
+    sig_thd = get_TRETS_significance_threshold(flux_points)
 
-    x = (flux_points["time_max"]+flux_points["time_min"])/2
+    mask_ul = flux_points_tab["is_ul"] is True
+    x = (flux_points_tab["time_max"]+flux_points_tab["time_min"])/2
 
-    plt.plot(x, flux_points["sig_detection"], "o", label="Flux point")
-    plt.plot(x[mask_ul.reshape(-1)], flux_points["sig_detection"][mask_ul.reshape(-1)], "o", label="UL")
+    plt.plot(x, flux_points_tab["sig_detection"], "o", label="Flux point")
+    plt.plot(x[mask_ul.reshape(-1)], flux_points_tab["sig_detection"][mask_ul.reshape(-1)], "o", label="UL")
 
     xmin, xmax = ax.get_xlim()
-    ax.hlines(flux_points.meta["SIG-THD"], xmin, xmax, label="Threshold", color="k")
+    ax.hlines(sig_thd, xmin, xmax, label="Threshold", color="k")
     ax.set_ylabel(r"Significance [$\sigma$]")
     ax.set_xlabel("Time [MJD]")
     plt.legend(loc="lower left")
