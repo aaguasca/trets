@@ -3,6 +3,7 @@
 
 import matplotlib.pyplot as plt
 import astropy.units as u
+import numpy as np
 from .utils import (
     get_TRETS_table,
     get_TRETS_significance_threshold,
@@ -36,14 +37,15 @@ def temporal_resolution_hist(ax, flux_points, temporal_units):
     """
 
     flux_points_tab = flux_points.to_table(sed_type="flux", format="lightcurve")
-    mask_ul = flux_points_tab["is_ul"] is True
+    mask_ul = flux_points_tab["is_ul"].value == True
+    mask_ul = mask_ul.reshape(-1)
 
     # flux points
-    time_array = (flux_points_tab["time_max"][~mask_ul.reshape(-1)]- \
-                  flux_points_tab["time_min"][~mask_ul.reshape(-1)])*u.day
+    time_array = (flux_points_tab["time_max"][~mask_ul]- \
+                  flux_points_tab["time_min"][~mask_ul])*u.day
     # UL
-    time_array_ul = (flux_points_tab["time_max"][mask_ul.reshape(-1)]- \
-                     flux_points_tab["time_min"][mask_ul.reshape(-1)])*u.day
+    time_array_ul = (flux_points_tab["time_max"][mask_ul]- \
+                     flux_points_tab["time_min"][mask_ul])*u.day
 
     time_array = time_array.to_value(temporal_units)
     n = ax.hist(time_array, bins=50, label="Flux point")
@@ -78,17 +80,18 @@ def significance_distribution(ax, flux_points):
     flux_points_tab = get_TRETS_table(flux_points)
     sig_thd = get_TRETS_significance_threshold(flux_points)
 
-    mask_ul = flux_points_tab["is_ul"] is True
+    mask_ul = flux_points_tab["is_ul"].value == True
+    mask_ul = mask_ul.reshape(-1)
     x = (flux_points_tab["time_max"]+flux_points_tab["time_min"])/2
 
     plt.plot(x, flux_points_tab["sig_detection"], "o", label="Flux point")
-    plt.plot(x[mask_ul.reshape(-1)], flux_points_tab["sig_detection"][mask_ul.reshape(-1)], "o", label="UL")
+    plt.plot(x[mask_ul], flux_points_tab["sig_detection"][mask_ul], "o", label="UL")
 
     xmin, xmax = ax.get_xlim()
     ax.hlines(sig_thd, xmin, xmax, label="Threshold", color="k")
     ax.set_ylabel(r"Significance [$\sigma$]")
     ax.set_xlabel("Time [MJD]")
-    plt.legend(loc="lower left")
+    plt.legend(loc="best")
 
     return ax
 

@@ -13,7 +13,7 @@ __all__ = [
     "get_TRETS_table",
     "get_TRETS_significance_threshold",
     "get_TRETS_timebin",
-    "get_TRETS_flux_significance"
+    "get_TRETS_flux_significance",
     "conditional_ray",
     "split_observations",
     "subrun_split",
@@ -75,7 +75,7 @@ def get_TRETS_flux_significance(flux_points):
     Obtain the significance detection for each time bin used to
     compute the flux points in flux_points object.
     """
-    return flux_points.meta["sig-column"]
+    return flux_points.meta["sig_detection"]
 
 def get_TRETS_timebin(flux_points):
     """
