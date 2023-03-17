@@ -168,7 +168,7 @@ class TRETS:
                 print(" ")
                 print(" ")
                 if not is_simu:
-                    print("OBSERVATION ID: %i. Total number of events: %i" % (id, len(obs.events.table)))
+                    print(f"OBSERVATION ID: {id}. Total number of events: {len(obs.events.table)}")
                     print("OBS gti Tstart (TT):", observations[0].gti.time_start.tt.iso)
                     print("OBS gti Tstop (TT):", observations[0].gti.time_stop.tt.iso)
                     print("first event time (TT)", (observations[0].gti.time_ref.tt + \
@@ -197,7 +197,7 @@ class TRETS:
 
             if print_check != 0:
                 if not is_simu:
-                    print("Time bin width used", list_t[1]-list_t[0], " s")
+                    print("Time bin width used", ((list_t[1]-list_t[0])*u.s).to(time_bin.unit))
                 else:
                     print("Time bin width used", obs.gti.time_delta[0].to_value("s"), " s")
                 print("Total number of time bins edges:", len(time_array))
@@ -316,15 +316,16 @@ class TRETS:
                     print("datasets_ONOFF gti Tstop:", datasets_ONOFF.gti.time_stop.tt.iso)
 
                     if not is_simu:
-                        print("first ev<ent ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[0])][0, 0])
+                        print("first event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[0])][0, 0])
                         print("last event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[-1])][0, 0])
-                        print("num even>ts subobs:", len(subobs.events.table["EVENT_ID"]))
+                        print("num events subobs:", len(subobs.events.table["EVENT_ID"]))
                     print("num events dataset:", 
                             datasets_ONOFF.counts_off.data.sum()+datasets_ONOFF.counts.data.sum())
                     print("######################")
                     print("non     noff     sig")
-                    print(f"{n_on:1.1f}     {n_off:1.1f}      {sig:1.1f}")
+                    print(f"{n_on:1.1f}     {n_off:1.1f}      {sig:1.3f}")
                     print("######################")
+                    print(datasets_ONOFF.info_dict()["sqrt_ts"])
                     print("counts On region:", datasets_ONOFF.counts.data.reshape(-1))
                     print("counts Off region:", datasets_ONOFF.counts_off.data.reshape(-1))
                     print("excess counts:", datasets_ONOFF.excess.data.reshape(-1))
@@ -394,7 +395,7 @@ class TRETS:
                                         sig_ul)
                                     )
                                 else:
-                                    print("events' in simu dataset: 0 to 1.  Sig=%.1f -> UL!" % (
+                                    print("events' in simu dataset: 0 to 1.  Sig=%.3f -> UL!" % (
                                         sig_ul)
                                     )
                                 print("---------------------------------------------------------------------------")
@@ -413,7 +414,7 @@ class TRETS:
                             print(" ")
 
     ################## SI passa el thd de sig ####################
-                if n_off > n_off_thd and n_on > n_on_thd and sig > sig_threshold:  # comupte flux
+                if n_off > n_off_thd and n_on > n_on_thd and sig > sig_threshold:  # compute flux
 
                     datasets_ONOFF.models = best_fit_spec_model  # set the model we use to estimate the light curve
 
@@ -480,12 +481,12 @@ class TRETS:
                                 if print_check == 1 or print_check == 2:
                                     print("---------------------------------------------------------------------------")
                                     if not is_simu:
-                                        print("events' bin: %.0f to %.0f. detect_sig=%.1f, sqrt(TS)_flux=%.1f ->UL!" % (
+                                        print("events' bin: %.0f to %.0f. detect_sig=%.3f, sqrt(TS)_flux=%.3f ->UL!" % (
                                             np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
                                             np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
                                             sig_ul, sqrt_ts_flux_ul))
                                     else:
-                                        print("events' bin: 0 to 1. detect_sig=%.1f, sqrt(TS)_flux=%.1f ->UL!" % (
+                                        print("events' bin: 0 to 1. detect_sig=%.3f, sqrt(TS)_flux=%.3f ->UL!" % (
                                             sig_ul, sqrt_ts_flux_ul))
                                     print("---------------------------------------------------------------------------")
 
@@ -516,7 +517,7 @@ class TRETS:
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
                                 if not is_simu:
-                                    print("events' bin: %i to %i with %i events from previous obs. detect_sig=%.1f, sqrt(TS)_flux=%.1f" \
+                                    print("events' bin: %i to %i with %i events from previous obs. detect_sig=%.3f, sqrt(TS)_flux=%.3f" \
                                                       % (
                                                           np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
                                                           np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
@@ -524,7 +525,7 @@ class TRETS:
                                                       )
                                     )
                                 else:
-                                    print("events' bin: 0 to 1 with %i events from previous obs. detect_sig=%.1f, sqrt(TS)_flux=%.1f" \
+                                    print("events' bin: 0 to 1 with %i events from previous obs. detect_sig=%.3f, sqrt(TS)_flux=%.3f" \
                                                       % (
                                                           prev_events, sig, sqrt_ts_flux
                                                       )
@@ -533,12 +534,12 @@ class TRETS:
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
                                 if not is_simu:
-                                    print("events' bin: %.0f to %.0f. detect_sig=%.1f, sqrt(TS)_flux=%.1f" % (
+                                    print("events' bin: %.0f to %.0f. detect_sig=%.3f, sqrt(TS)_flux=%.3f" % (
                                         np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
                                         np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
                                         sig, sqrt_ts_flux))
                                 else:
-                                    print("events' bin: 0 to 1. detect_sig=%.1f, sqrt(TS)_flux=%.1f" % (
+                                    print("events' bin: 0 to 1. detect_sig=%.3f, sqrt(TS)_flux=%.3f" % (
                                         sig, sqrt_ts_flux))
                         # !!!!!!!!CHECKS!!!!!!!!
                         if print_check == 2:

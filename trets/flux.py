@@ -108,18 +108,18 @@ class lightcurve_methods:
                 "sky_model"                   # ""
             }
 
-        if not self.is_simu:
-            del_notsimu_keys={
+        if self.is_simu:
+            del_notsimu_keys = [
                 "e_reco",
                 "e_true",
                 "on_region",
                 "bkg_maker_reflected",
-            }
+            ]
             if self.script_name == "TRETS" or self.script_name == "intrarun":
-                del_notsimu_keys["time_bin"] = None
+                del_notsimu_keys.append("time_bin")
 
             for key in del_notsimu_keys:
-                del allowed_keys[key]
+                allowed_keys.remove(key)
             
         return allowed_keys            
             
