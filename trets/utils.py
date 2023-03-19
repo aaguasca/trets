@@ -3,24 +3,47 @@
 
 from astropy.time import Time
 import astropy.units as u
+from astropy.io import fits
+from astropy.table import (
+    Table,
+    hstack,
+)
 import ray
 import numpy as np
 from gammapy.data import Observations
+from gammapy.estimators import (
+    FluxPoints,
+)
 import math
 
 __all__ = [
+    "del_asymmetric_errors",
     "get_intervals",
     "get_TRETS_table",
     "get_TRETS_significance_threshold",
     "get_TRETS_timebin",
     "get_TRETS_flux_significance",
     "conditional_ray",
+    "read_TRETS_fluxpoints",
     "split_observations",
     "subrun_split",
     "fraction_outside_interval",
-    "variance_error_prop_calculation"
+    "variance_error_prop_calculation",
+    "write_TRETS_fluxpoints"
 ]
 
+
+def del_asymmetric_errors(flux_points):
+    tab = flux_points.to_table(sed_type="flux", format="lightcurve")
+    meta_TRETS = flux_points.meta.copy()
+
+    for colname in tab.colnames:
+        if "errn" in colname or "errp" in colname:
+            del tab[colname]
+
+    fluxpoints = FluxPoints.from_table(tab, sed_type="flux", format="lightcurve")
+    fluxpoints.meta = meta_TRETS
+    return fluxpoints
 
 def get_intervals(data, n):
     """
@@ -60,7 +83,7 @@ def get_TRETS_table(flux_points):
     """
     tab = flux_points.to_table(sed_type="flux", format="lightcurve")
     sig_detection_column = get_TRETS_flux_significance(flux_points)
-    tab["sig_detection"] = sig_detection_column
+    tab = hstack([tab, sig_detection_column])
     return tab
 
 def get_TRETS_significance_threshold(flux_points):
@@ -110,6 +133,21 @@ def conditional_ray(attr):
         return inner
 
     return decorator
+
+
+def read_TRETS_fluxpoints(filename):
+    tab = Table.read(filename, format="fits")
+    tab.meta["TIME-BIN"] = tab.meta["TIME-BIN"] * u.s
+    del tab.meta["EXTNAME"]
+    # lowercase all metadata keys
+    for k in list(tab.meta.keys()):
+        tab.meta[k.lower()] = tab.meta.pop(k)
+
+    # move sig_detection column to metadata
+    tab.meta["sig_detection"] = tab["sig_detection"]
+
+    fluxpoints = FluxPoints.from_table(tab, sed_type="flux", format="lightcurve")
+    return fluxpoints
 
 
 def split_observations(observations, threshold_time):
@@ -314,3 +352,32 @@ def variance_error_prop_calculation(errors, weights):
     squared_mean_error = np.sum((np.array(errors)*norm_weights)**2)
     
     return squared_mean_error
+
+
+def write_TRETS_fluxpoints(filename, flux_points, **kwargs):
+    tab = get_TRETS_table(flux_points)
+    header = fits.Header()
+
+    # delete gpy keys
+    del tab.meta["sed_type_init"]
+    del tab.meta["SED_TYPE"]
+
+    tab.meta["time-bin"] = tab.meta["time-bin"].to("s")
+
+    # add metadata to header
+    for k, v in zip(tab.meta.keys(), tab.meta.values()):
+        if isinstance(v, u.quantity.Quantity):
+            header[f"{k}"] = (
+                v.to_value(v.unit),
+                f"[{v.unit.to_string()}]",
+            )
+        else:
+            header[f"{k}"] = (v)
+    tab.meta.clear()
+
+    fluxes = fits.BinTableHDU(tab, header=header, name="FLUXES")
+
+    hdulist = fits.HDUList(
+        [fits.PrimaryHDU(), fluxes]
+    )
+    hdulist.writeto(filename, **kwargs)
