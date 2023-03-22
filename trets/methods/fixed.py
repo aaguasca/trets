@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # Licensed under a 3-clause BSD style license - see LICENSE
 
-from ..utils import subrun_split
+from ..utils import (
+    subrun_split,
+    get_intervals_sum,
+    split_data_from_intervals
+)
 import numpy as np
 from astropy.time import (
     Time
@@ -85,22 +89,43 @@ def intrarun(
     datasets_short = Datasets()
 
     if time_bin is not None:
-        time_interval_obs = []
-        for run in range(len(observations)):
-            time_interval_obs.append(
-                Time(
-                    [observations[run].events.observation_time_start.tt.mjd,
-                     observations[run].events.observation_time_stop.tt.mjd],
-                    format="mjd",
-                    scale="tt"
+
+        #data at DL3
+        if not is_simu:
+            time_interval_obs = []
+            for run in range(len(observations)):
+                time_interval_obs.append(
+                    Time(
+                        [observations[run].events.observation_time_start.tt.mjd,
+                         observations[run].events.observation_time_stop.tt.mjd],
+                        format="mjd",
+                        scale="tt"
+                    )
                 )
+
+            time_intervals = subrun_split(time_bin, time_interval_obs)
+
+            # divide the runs into different subruns
+            short_observations = observations.select_time(time_intervals)
+
+        #data at DL4
+        else:
+            gti_time_start_obs = observations.gti.time_start
+            gti_time_stop_obs = observations.gti.time_stop
+            time_intervals = get_intervals_sum(gti_time_start_obs, gti_time_stop_obs, time_bin)
+            observations_sets = split_data_from_intervals(
+                observations,
+                time_intervals,
+                gti_time_start_obs,
+                gti_time_stop_obs
             )
+            print(len(observations_sets))
 
-        time_intervals = subrun_split(time_bin, time_interval_obs)
+            short_observations = Datasets()
+            for obs_set in observations_sets:
+                short_observations.append(Datasets(obs_set).stack_reduce())
+            short_observations = Datasets(short_observations)
 
-        # divide the runs into different subruns
-        short_observations = observations.select_time(time_intervals)
-    
     else:
         # only to match observations
         short_observations = observations

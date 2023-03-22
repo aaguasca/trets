@@ -115,7 +115,7 @@ class lightcurve_methods:
                 "on_region",
                 "bkg_maker_reflected",
             ]
-            if self.script_name == "TRETS" or self.script_name == "intrarun":
+            if self.script_name == "TRETS":
                 del_notsimu_keys.append("time_bin")
 
             for key in del_notsimu_keys:
@@ -279,14 +279,13 @@ class lightcurve_methods:
                     best_fit_spec_model=self.sky_model
                 )
             else:
-                print("Dataset-wise light curve (doing the same as runwise method with option is_simu = True).")
                 light_curve = intrarun(
                     is_simu=self.is_simu,
                     E1=self.e_inf_flux,
                     E2=self.e_sup_flux,
                     e_reco=None,
                     e_true=None,
-                    time_bin=None,
+                    time_bin=self.time_bin,
                     on_region=None,
                     observations=self.observations,
                     bkg_maker_reflected=None,
