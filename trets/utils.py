@@ -29,7 +29,10 @@ __all__ = [
     "subrun_split",
     "fraction_outside_interval",
     "variance_error_prop_calculation",
-    "write_TRETS_fluxpoints"
+    "write_TRETS_fluxpoints",
+    "get_intervals_sum",
+    "split_data_from_intervals"
+
 ]
 
 
@@ -84,6 +87,10 @@ def get_TRETS_table(flux_points):
     tab = flux_points.to_table(sed_type="flux", format="lightcurve")
     sig_detection_column = get_TRETS_flux_significance(flux_points)
     tab = hstack([tab, sig_detection_column])
+
+    meta = flux_points.meta.copy()
+    del meta["sig_detection"]
+    tab.meta = meta
     return tab
 
 def get_TRETS_significance_threshold(flux_points):
@@ -381,3 +388,55 @@ def write_TRETS_fluxpoints(filename, flux_points, **kwargs):
         [fits.PrimaryHDU(), fluxes]
     )
     hdulist.writeto(filename, **kwargs)
+
+
+def get_intervals_sum(start, stop, thd_sum, digit_res=5):
+    """
+    always keep the minimum time interval checking the next dataset
+    """
+
+    if isinstance(thd_sum, u.Quantity):
+        dt = (stop - start).to(thd_sum.unit)
+        sum_dt = 0 * thd_sum.unit
+    else:
+        dt = stop - start
+        sum_dt = 0
+
+    arg_ini = 0
+    intervals = []
+
+    sum_dt = sum_dt + dt[0]
+    for i in range(1, len(dt)):
+        # keep the value of start and stop of the interval where the sum is smaller than thd
+        if round((sum_dt + dt[i]).to_value(thd_sum.unit), digit_res) * thd_sum.unit > thd_sum:
+            arg_end = i - 1
+            intervals.append(
+                [start[arg_ini], stop[arg_end]]
+            )
+            # restart
+            arg_ini = i
+            min_coef = 0
+            sum_dt = dt[i]
+        else:
+            sum_dt = sum_dt + dt[i]
+
+    intervals.append(
+        [start[arg_ini], stop[-1]]
+    )
+
+    return intervals
+
+
+def split_data_from_intervals(data, intervals, start, stop):
+    split_data = []
+    for i, (ini, end) in enumerate(intervals):
+        arg_i = np.argwhere(start == ini)[0, 0]
+        arg_e = np.argwhere(stop == end)[0, 0]
+
+        if arg_i == 0:
+            arg_i = None
+        if arg_e == len(start) - 1 and i == len(intervals) - 1:
+            arg_e = None
+
+        split_data.append(data[arg_i:arg_e])
+    return split_data
