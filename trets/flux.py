@@ -4,13 +4,13 @@
 import time
 import ray
 import numpy as np
-from .utils import (
+from trets.utils import (
     split_observations,
     fraction_outside_interval,
     variance_error_prop_calculation
 )
-from .methods.fixed import intrarun
-from .methods.variable import TRETS
+from trets.methods.fixed import intrarun
+from trets.methods.variable import TRETS
 import astropy.units as u
 from astropy.table import (
     vstack
@@ -75,12 +75,13 @@ class lightcurve_methods:
                 "sqrt_TS_flux_UL_threshold",  # Flux point Fit significance threshold
                 "print_check",                # Value that shows different values to check the script.
                 "thres_time_twoobs",          # Threshold time to consider two consecutive runs
-                "time_bin",                   # Time added in each iteration.
+                "bin_iterate",                # Time/events added in each iteration.
                 "observations",               # Observation object with the runs used to compute the light curve.
                 "bkg_maker_reflected",        # Background maker to estimate the background.
                 "sky_model",                  # Assumed Skymodel of the source
                 "bool_bayesian",              # Boolean to use or not bayesian approach
-                "parallelization"             # Boolean to use parallelization or not
+                "parallelization",            # Boolean to use parallelization or not
+                "bool_eventbin_iterate"       # Boolean to use event-fixed or time-fixed intervals
             }
             
         if self.script_name == "intrarun":
@@ -116,7 +117,7 @@ class lightcurve_methods:
                 "bkg_maker_reflected",
             ]
             if self.script_name == "TRETS":
-                del_notsimu_keys.append("time_bin")
+                del_notsimu_keys.append("bin_iterate")
 
             for key in del_notsimu_keys:
                 allowed_keys.remove(key)
@@ -139,12 +140,17 @@ class lightcurve_methods:
             if self.parallelization:
                 self.is_ray = True
                 ray.init()
-                parallelization_TRETS = TRETS(parallelization=self.is_ray)
 
                 futures_list = []
                 for obs in split_obs:
                     if not self.is_simu:
+                        parallelization_TRETS = TRETS(
+                            parallelization=self.is_ray,
+                            bool_eventbin_iterate=self.bool_eventbin_iterate
+                        )
+                        #Following: https://stackoverflow.com/a/52903322
                         futures = parallelization_TRETS.TRETS_algorithm().remote(
+                            parallelization_TRETS,
                             is_simu=self.is_simu,
                             E1=self.e_inf_flux,
                             E2=self.e_sup_flux,
@@ -155,14 +161,20 @@ class lightcurve_methods:
                             sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
                             print_check=self.print_check,
                             thres_time_twoobs=self.thres_time_twoobs,
-                            time_bin=self.time_bin,
+                            bin_iterate=self.bin_iterate,
                             observations=obs,
                             bkg_maker_reflected=self.bkg_maker_reflected,
                             best_fit_spec_model=self.sky_model,
                             bool_bayesian=self.bool_bayesian
                         )
                     else:
-                        futures = parallelization_TRETS.TRETS_algorithm().remote(
+                        parallelization_TRETS = TRETS.remote(
+                            parallelization=self.is_ray,
+                            bool_eventbin_iterate=False
+                        )
+                        #Following: https://stackoverflow.com/a/52903322
+                        futures = parallelization_TRETS.TRETS_algorithm.remote(
+                            parallelization_TRETS,
                             is_simu=self.is_simu,
                             E1=self.e_inf_flux,
                             E2=self.e_sup_flux,
@@ -173,7 +185,7 @@ class lightcurve_methods:
                             sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
                             print_check=self.print_check,
                             thres_time_twoobs=self.thres_time_twoobs,
-                            time_bin=None,
+                            bin_iterate=None,
                             observations=obs,
                             bkg_maker_reflected=None,
                             best_fit_spec_model=self.sky_model,
@@ -202,13 +214,14 @@ class lightcurve_methods:
             # TRETS without prallelization
             else:
                 self.is_ray = False
-  
-                # TRETS_local=TRETS(
-                algorithm_TRETS = TRETS(parallelization=self.is_ray)
-                # light_curve,sig_column=TRETS(
-                TRETS_local = algorithm_TRETS.TRETS_algorithm()
+
                 if not self.is_simu:
-                    light_curve, sig_column = TRETS_local(
+                    algorithm_TRETS_local = TRETS(
+                        parallelization=self.is_ray,
+                        bool_eventbin_iterate=self.bool_eventbin_iterate
+                    )
+
+                    light_curve, sig_column = algorithm_TRETS_local.TRETS_algorithm(
                         is_simu=self.is_simu,
                         E1=self.e_inf_flux,
                         E2=self.e_sup_flux,
@@ -219,14 +232,19 @@ class lightcurve_methods:
                         sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
                         print_check=self.print_check,
                         thres_time_twoobs=self.thres_time_twoobs,
-                        time_bin=self.time_bin,
+                        bin_iterate=self.bin_iterate,
                         observations=self.observations,
                         bkg_maker_reflected=self.bkg_maker_reflected,
                         best_fit_spec_model=self.sky_model,
                         bool_bayesian=self.bool_bayesian
                     )
                 else:
-                    light_curve, sig_column = TRETS_local(
+                    algorithm_TRETS_local = TRETS(
+                        parallelization=self.is_ray,
+                        bool_eventbin_iterate=False
+                    )
+
+                    light_curve, sig_column = algorithm_TRETS_local.TRETS_algorithm(
                         is_simu=self.is_simu,
                         E1=self.e_inf_flux,
                         E2=self.e_sup_flux,
@@ -237,14 +255,13 @@ class lightcurve_methods:
                         sqrt_TS_flux_UL_threshold=self.sqrt_TS_flux_UL_threshold,
                         print_check=self.print_check,
                         thres_time_twoobs=self.thres_time_twoobs,
-                        time_bin=None,
+                        bin_iterate=None,
                         observations=self.observations,
                         bkg_maker_reflected=None,
                         best_fit_spec_model=self.sky_model,
                         bool_bayesian=self.bool_bayesian
                     )
-                # light_curve,sig_column=TRETS_local()
-                
+
                 light_curve.meta.update({"sig_detection": sig_column})
                 light_curve = FluxPoints.from_table(
                     light_curve,

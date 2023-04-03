@@ -21,7 +21,7 @@ __all__ = [
     "get_intervals",
     "get_TRETS_table",
     "get_TRETS_significance_threshold",
-    "get_TRETS_timebin",
+    "get_TRETS_binIterator",
     "get_TRETS_flux_significance",
     "conditional_ray",
     "read_TRETS_fluxpoints",
@@ -107,12 +107,16 @@ def get_TRETS_flux_significance(flux_points):
     """
     return flux_points.meta["sig_detection"]
 
-def get_TRETS_timebin(flux_points):
+def get_TRETS_binIterator(flux_points):
     """
-    Obtain the time bin interval used to compute TRETS
+    Obtain the bin interval value used to compute TRETS
     flux points in flux_points object.
+    If event-bin-method, event-wise iterator is used, if
+    time-bin-method, fixed-time interval iterator is used.
     """
-    return flux_points.meta["time-bin"]
+    for k in flux_points.meta.keys():
+        if "method" in k:
+            return flux_points.meta[k]
 
 def get_TRETS_flux_significance_thd(flux_points):
     """
@@ -123,7 +127,8 @@ def get_TRETS_flux_significance_thd(flux_points):
 
 def conditional_ray(attr):
     """
-    Conditional ray decorator
+    Conditional ray decorator.
+    Source: https://github.com/ray-project/ray/issues/8105#issuecomment-863940313
     """
 
     def decorator(func):
@@ -144,7 +149,8 @@ def conditional_ray(attr):
 
 def read_TRETS_fluxpoints(filename):
     tab = Table.read(filename, format="fits")
-    tab.meta["TIME-BIN"] = tab.meta["TIME-BIN"] * u.s
+    if "TIME-BIN-METHOD" in tab.meta.keys():
+        tab.meta["TIME-BIN-METHOD"] = tab.meta["TIME-BIN-METHOD"] * u.s
     del tab.meta["EXTNAME"]
     # lowercase all metadata keys
     for k in list(tab.meta.keys()):
@@ -369,7 +375,8 @@ def write_TRETS_fluxpoints(filename, flux_points, **kwargs):
     del tab.meta["sed_type_init"]
     del tab.meta["SED_TYPE"]
 
-    tab.meta["time-bin"] = tab.meta["time-bin"].to("s")
+    if "time-bin-method" in tab.meta.keys():
+        tab.meta["time-bin-method"] = tab.meta["time-bin-method"].to("s")
 
     # add metadata to header
     for k, v in zip(tab.meta.keys(), tab.meta.values()):

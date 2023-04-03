@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 # Licensed under a 3-clause BSD style license - see LICENSE
 
-from ..utils import conditional_ray
-from ..bayes import BayesianProbability
+from trets.utils import (
+    conditional_ray,
+    get_intervals
+)
+from trets.bayes import BayesianProbability
 from astropy.time import (
     Time
 )
@@ -31,21 +34,99 @@ from gammapy.estimators import (
 from gammapy.stats import (
     WStatCountsStatistic,
 )
-
+import ray
 
 __all__ = ['TRETS']
 
 
+#@ray.remote
 class TRETS:
-    def __init__(self, parallelization):
+    def __init__(self, parallelization, bool_eventbin_iterate):
+
+        self.bool_eventbin_iterate = bool_eventbin_iterate
+
         if parallelization:
             self.is_ray = True
-#            ray.init()
         else:
             self.is_ray = False
 
+    def iterate_timewise(self, time_bin, event_time_array, obs_time_ref):
+        """
+        Compute the time edges to filter the observation to run
+        TRETS using a fixed time interval of time_bin.
+
+        Parameters
+        ----------
+        time_bin: astropy.Quantity
+            Time bin iteration.
+        event_time_array: `numpy.ndarray`
+            Numpy array with the trigger time of the events in the observation. The time
+            interval is given in seconds w.r.t. the reference time of the observation.
+        obs_time_ref: `astropy.time.core.Time`
+            Reference time of the observation.
+        Returns
+        -------
+        time_array: `astropy.time.core.Time`
+            Array time with the edge of each interval.
+        """
+
+        if not time_bin.unit.is_equivalent(u.s):
+            raise ValueError("Specify the interval of time using time quantity unit.")
+
+        event_tini = event_time_array[0] * u.s
+        event_tstop = event_time_array[-1] * u.s
+
+        dt = event_tstop - event_tini
+        list_t = np.linspace(0, dt.to_value("s"), int(np.ceil(dt.to_value("s") / time_bin.to_value("s"))))
+
+        # TODO: investigate why using obs.gti.time_start.tt.mjd and removing event_time_array[0] I loose events
+        time_array = obs_time_ref.tt + Quantity(event_tini.to_value("s") + list_t, "s")
+        method_name = "time-bin-method"
+        print(f"Using {method_name}")
+
+        return time_array, time_bin, method_name
+
+    def iterate_eventwise(self, event_bin, event_time_array, obs_time_ref):
+        """
+        Compute the time edges to filter the observation to run
+        TRETS using a fixed number of events of event_bin=Non+Noff.
+
+        Parameters
+        ----------
+        event_bin: astropy.Quantity
+            Number of events (in all the observation) added in each bin iteration.
+        event_time_array: `numpy.ndarray`
+            Numpy array with the trigger time of the events in the observation. The time
+            interval is given in seconds w.r.t. the reference time of the observation.
+        obs_time_ref: `astropy.time.core.Time`
+            Reference time of the observation.
+        Returns
+        -------
+        time_array: `astropy.time.core.Time`
+            Array time with the edge of each interval.
+
+        """
+        if not event_bin.unit.is_unity():
+            raise ValueError("Specify the interval of events using dimensionless unit.")
+
+        print(int(event_bin.to_value("")))
+        list_t = get_intervals(event_time_array, int(event_bin))
+        time_array = obs_time_ref + Quantity(list_t, "s")
+        method_name = "event-bin-method"
+        print(f"Using {method_name}")
+
+        return time_array, event_bin, method_name
+
+    def produce_intervals_method(self):
+        if self.bool_eventbin_iterate:
+            return self.iterate_eventwise
+        else:
+            return self.iterate_timewise
+
+
     @conditional_ray('is_ray')
     def TRETS_algorithm(
+        self,
         is_simu,
         E1,
         E2,
@@ -56,11 +137,11 @@ class TRETS:
         sqrt_TS_flux_UL_threshold,
         print_check,
         thres_time_twoobs,
-        time_bin,
+        bin_iterate,
         observations,
         bkg_maker_reflected,
         best_fit_spec_model,
-        bool_bayesian=True
+        bool_bayesian=True,
     ):  
         """
         TRETS algorithm. Computes the light curve between energies [E1,E2] where in each integral flux, 
@@ -83,7 +164,7 @@ class TRETS:
         on_region:
             On region located in the source position, it must have the same size used in the IRFs.
         sig_threshold:
-            Significance threshold used to compute a integral flux.
+            Significance threshold used to compute an integral flux.
         sqrt_TS_flux_UL_threshold:
             Fit significance threshold to save the integral flux as a flux point.
         print_check: integer
@@ -151,7 +232,7 @@ class TRETS:
             reoptimize=False,
             n_sigma=1,
             n_sigma_ul=2,
-            selection_optional='all',
+            selection_optional=['all'],
             atol=Quantity(1e-6, "s")
         )
 
@@ -181,14 +262,12 @@ class TRETS:
 
             if not is_simu:
                 event_time = obs.events.table["TIME"].data
-
-                obs_tini = obs.gti.time_start.tt.mjd * u.d
-                obs_tstop = obs.gti.time_stop.tt.mjd * u.d
-                dt = obs_tstop - obs_tini
-                list_t = np.linspace(0, dt[0].to_value("s"), int(np.ceil(dt.to_value("s")/time_bin.to_value("s"))))
-
-                # TODO: investigate why using obs.gti.time_start.tt.mjd and removing event_time[0] I loose events
-                time_array = obs.gti.time_ref.tt + Quantity(event_time[0] + list_t, "s")
+                interval_method = self.produce_intervals_method()
+                time_array, bin_iterate, method_name = interval_method(
+                        bin_iterate,
+                        event_time_array=event_time,
+                        obs_time_ref=obs.gti.time_ref.tt
+                )
 
             #for simu, the events in the dataset do not have trigger time info
             else:
@@ -197,7 +276,10 @@ class TRETS:
 
             if print_check != 0:
                 if not is_simu:
-                    print("Time bin width used", ((list_t[1]-list_t[0])*u.s).to(time_bin.unit))
+                    if bin_iterate.unit.is_unity():
+                        print("Time bin width used", ((time_array[1].mjd-time_array[0].mjd)*u.d).to("s"))
+                    else:
+                        print("Time bin width used", ((time_array[1].mjd-time_array[0].mjd)*u.d).to(bin_iterate.unit))
                 else:
                     print("Time bin width used", obs.gti.time_delta[0].to_value("s"), " s")
                 print("Total number of time bins edges:", len(time_array))
@@ -561,8 +643,11 @@ class TRETS:
         light_curve.meta.update({"sig-thd": sig_threshold})
         light_curve.meta.update({"sig-flux-thd": sqrt_TS_flux_UL_threshold})
         if not is_simu:
-            light_curve.meta.update({"time-bin": time_bin})
+            if method_name == "time-bin-method":
+                light_curve.meta.update({method_name: bin_iterate.to("s")})
+            else:
+                light_curve.meta.update({method_name: bin_iterate})
         else:
-            light_curve.meta.update({"time-bin": obs.gti.time_delta[0].to("s")})
+            light_curve.meta.update({"time-bin-method": obs.gti.time_delta[0].to("s")})
 
         return light_curve.copy(), sig_column.copy()
