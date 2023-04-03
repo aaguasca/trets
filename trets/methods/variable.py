@@ -127,7 +127,7 @@ class TRETS:
     @conditional_ray('is_ray')
     def TRETS_algorithm(
         self,
-        is_simu,
+        is_DL4,
         E1,
         E2,
         e_reco,
@@ -196,7 +196,7 @@ class TRETS:
 
         """        
 
-        if not is_simu:
+        if not is_DL4:
             print("Running TRETS at DL3 level (real data)")
             geom = RegionGeom.create(region=on_region, axes=[e_reco])
 
@@ -209,7 +209,7 @@ class TRETS:
             observations_id = observations.ids
 
         else:
-            print("Running TRETS at DL4 level (simulations)")
+            print("Running TRETS at DL4 level (simulations or binned real data)")
             print("DL3 specifications {e_reco, e_true, on_region, time_bin, bkg_maker_reflected} will not be "+\
                   "considered... Using the Dataset objects specifications!")
             observations_id = observations.names
@@ -248,7 +248,7 @@ class TRETS:
             if print_check != 0:
                 print(" ")
                 print(" ")
-                if not is_simu:
+                if not is_DL4:
                     print(f"OBSERVATION ID: {id}. Total number of events: {len(obs.events.table)}")
                     print("OBS gti Tstart (TT):", observations[0].gti.time_start.tt.iso)
                     print("OBS gti Tstop (TT):", observations[0].gti.time_stop.tt.iso)
@@ -260,7 +260,7 @@ class TRETS:
                 else:
                     print(f"OBSERVATION ID: {id}.")
 
-            if not is_simu:
+            if not is_DL4:
                 event_time = obs.events.table["TIME"].data
                 interval_method = self.produce_intervals_method()
                 time_array, bin_iterate, method_name = interval_method(
@@ -269,13 +269,13 @@ class TRETS:
                         obs_time_ref=obs.gti.time_ref.tt
                 )
 
-            #for simu, the events in the dataset do not have trigger time info
+            #for DL4 data, the events in the dataset do not have trigger time info
             else:
                 #dummpy time_array
                 time_array = np.array([0, 1], dtype=float)
 
             if print_check != 0:
-                if not is_simu:
+                if not is_DL4:
                     if bin_iterate.unit.is_unity():
                         print("Time bin width used", ((time_array[1].mjd-time_array[0].mjd)*u.d).to("s"))
                     else:
@@ -293,7 +293,7 @@ class TRETS:
                     arg_start_time = cont_t
                 arg_stop_time = cont_t+1
 
-                if not is_simu:
+                if not is_DL4:
                     # filter the observation
                     filters = ObservationFilter(
                         time_filter=Time(
@@ -313,7 +313,7 @@ class TRETS:
                     dataset = dataset_maker.run(dataset_empty.copy(name=str(arg_start_time)), subobs)
                     dataset_on_off = bkg_maker_reflected.run(dataset, subobs)
 
-                # no need to filter a dataset. Copy the simulated dataset and consider all events
+                # no need to filter a dataset. Copy the dataset and consider all events
                 else:
                     dataset_on_off = obs.copy()
 
@@ -378,7 +378,7 @@ class TRETS:
                     print(" ")
                     print(arg_start_time, " to ", arg_stop_time, ", total args:", len(time_array) - 1)
                     print("OBSERVATION ID:", id)
-                    if not is_simu:
+                    if not is_DL4:
                     # també es pot comprovat sumant el temps "s" de la taula amb gti de la dataset
                         print(f"start time observation {id}, {obs.gti.time_start.tt.iso}")
                         print(f"stop time observation {id}, {obs.gti.time_stop.tt.iso}")
@@ -397,7 +397,7 @@ class TRETS:
                     print("datasets_ONOFF gti Tstart:", datasets_ONOFF.gti.time_start.tt.iso)
                     print("datasets_ONOFF gti Tstop:", datasets_ONOFF.gti.time_stop.tt.iso)
 
-                    if not is_simu:
+                    if not is_DL4:
                         print("first event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[0])][0, 0])
                         print("last event ID:", event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[-1])][0, 0])
                         print("num events subobs:", len(subobs.events.table["EVENT_ID"]))
@@ -470,14 +470,14 @@ class TRETS:
 
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
-                                if not is_simu:
+                                if not is_DL4:
                                     print("events' bin: %.0f to %.0f.  Sig=%.1f -> UL!" % (
                                         np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
                                         np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
                                         sig_ul)
                                     )
                                 else:
-                                    print("events' in simu dataset: 0 to 1.  Sig=%.3f -> UL!" % (
+                                    print("events' in binned dataset: 0 to 1.  Sig=%.3f -> UL!" % (
                                         sig_ul)
                                     )
                                 print("---------------------------------------------------------------------------")
@@ -562,7 +562,7 @@ class TRETS:
 
                                 if print_check == 1 or print_check == 2:
                                     print("---------------------------------------------------------------------------")
-                                    if not is_simu:
+                                    if not is_DL4:
                                         print("events' bin: %.0f to %.0f. detect_sig=%.3f, sqrt(TS)_flux=%.3f ->UL!" % (
                                             np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
                                             np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
@@ -598,7 +598,7 @@ class TRETS:
                             prev_dataset = Datasets()
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
-                                if not is_simu:
+                                if not is_DL4:
                                     print("events' bin: %i to %i with %i events from previous obs. detect_sig=%.3f, sqrt(TS)_flux=%.3f" \
                                                       % (
                                                           np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
@@ -615,7 +615,7 @@ class TRETS:
                         else:
                             if print_check == 1 or print_check == 2:
                                 print("---------------------------------------------------------------------------")
-                                if not is_simu:
+                                if not is_DL4:
                                     print("events' bin: %.0f to %.0f. detect_sig=%.3f, sqrt(TS)_flux=%.3f" % (
                                         np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
                                         np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
@@ -642,7 +642,7 @@ class TRETS:
         sig_column = Table(data=[sig_array], names=["sig_detection"], dtype=[np.float32])
         light_curve.meta.update({"sig-thd": sig_threshold})
         light_curve.meta.update({"sig-flux-thd": sqrt_TS_flux_UL_threshold})
-        if not is_simu:
+        if not is_DL4:
             if method_name == "time-bin-method":
                 light_curve.meta.update({method_name: bin_iterate.to("s")})
             else:

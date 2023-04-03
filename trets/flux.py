@@ -37,13 +37,13 @@ class lightcurve_methods:
     - runwise
     """
 
-    def __init__(self, script_name, is_simu, **kwargs):
+    def __init__(self, script_name, is_DL4, **kwargs):
         """
         """
         # name of the method used to obtain the light curve (TRETS, intrarun_lc or runwise_lc)
         self.script_name = script_name
-        # if the dataset are simulations
-        self.is_simu = is_simu
+        # if the dataset are already binned (simulations or DL4 real data)
+        self.is_DL4 = is_DL4
 
         #TODO: Allow the return the dictionary with the keys required to run the method (option)
         #TODO: Create method that reads the returned dictionary after instantiate the class
@@ -51,7 +51,7 @@ class lightcurve_methods:
         self.__dict__.update((key, value) for key, value in kwargs.items() if key in allowed_keys)
 
         #TODO: move these checks to the methods
-        if not is_simu:
+        if not is_DL4:
             print(self.e_inf_flux.to(self.e_reco.edges.unit).value,self.e_reco.edges.value)
             assert round(self.e_inf_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
             assert round(self.e_sup_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
@@ -109,17 +109,17 @@ class lightcurve_methods:
                 "sky_model"                   # ""
             }
 
-        if self.is_simu:
-            del_notsimu_keys = [
+        if self.is_DL4:
+            del_noDL4_keys = [
                 "e_reco",
                 "e_true",
                 "on_region",
                 "bkg_maker_reflected",
             ]
             if self.script_name == "TRETS":
-                del_notsimu_keys.append("bin_iterate")
+                del_noDL4_keys.append("bin_iterate")
 
-            for key in del_notsimu_keys:
+            for key in del_noDL4_keys:
                 allowed_keys.remove(key)
             
         return allowed_keys            
@@ -143,7 +143,7 @@ class lightcurve_methods:
 
                 futures_list = []
                 for obs in split_obs:
-                    if not self.is_simu:
+                    if not self.is_DL4:
                         parallelization_TRETS = TRETS(
                             parallelization=self.is_ray,
                             bool_eventbin_iterate=self.bool_eventbin_iterate
@@ -151,7 +151,7 @@ class lightcurve_methods:
                         #Following: https://stackoverflow.com/a/52903322
                         futures = parallelization_TRETS.TRETS_algorithm().remote(
                             parallelization_TRETS,
-                            is_simu=self.is_simu,
+                            is_DL4=self.is_DL4,
                             E1=self.e_inf_flux,
                             E2=self.e_sup_flux,
                             e_reco=self.e_reco,
@@ -175,7 +175,7 @@ class lightcurve_methods:
                         #Following: https://stackoverflow.com/a/52903322
                         futures = parallelization_TRETS.TRETS_algorithm.remote(
                             parallelization_TRETS,
-                            is_simu=self.is_simu,
+                            is_DL4=self.is_DL4,
                             E1=self.e_inf_flux,
                             E2=self.e_sup_flux,
                             e_reco=None,
@@ -215,14 +215,14 @@ class lightcurve_methods:
             else:
                 self.is_ray = False
 
-                if not self.is_simu:
+                if not self.is_DL4:
                     algorithm_TRETS_local = TRETS(
                         parallelization=self.is_ray,
                         bool_eventbin_iterate=self.bool_eventbin_iterate
                     )
 
                     light_curve, sig_column = algorithm_TRETS_local.TRETS_algorithm(
-                        is_simu=self.is_simu,
+                        is_DL4=self.is_DL4,
                         E1=self.e_inf_flux,
                         E2=self.e_sup_flux,
                         e_reco=self.e_reco,
@@ -245,7 +245,7 @@ class lightcurve_methods:
                     )
 
                     light_curve, sig_column = algorithm_TRETS_local.TRETS_algorithm(
-                        is_simu=self.is_simu,
+                        is_DL4=self.is_DL4,
                         E1=self.e_inf_flux,
                         E2=self.e_sup_flux,
                         e_reco=None,
@@ -282,9 +282,9 @@ class lightcurve_methods:
 #                 p.join()
     
         if self.script_name == "intrarun":
-            if not self.is_simu:
+            if not self.is_DL4:
                 light_curve = intrarun(
-                    is_simu=self.is_simu,
+                    is_DL4=self.is_DL4,
                     E1=self.e_inf_flux,
                     E2=self.e_sup_flux,
                     e_reco=self.e_reco,
@@ -297,7 +297,7 @@ class lightcurve_methods:
                 )
             else:
                 light_curve = intrarun(
-                    is_simu=self.is_simu,
+                    is_DL4=self.is_DL4,
                     E1=self.e_inf_flux,
                     E2=self.e_sup_flux,
                     e_reco=None,
@@ -310,9 +310,9 @@ class lightcurve_methods:
                 )
 
         if self.script_name == "runwise":
-            if not self.is_simu:
+            if not self.is_DL4:
                 light_curve = intrarun(
-                    is_simu=self.is_simu,
+                    is_DL4=self.is_DL4,
                     E1=self.e_inf_flux,
                     E2=self.e_sup_flux,
                     e_reco=self.e_reco,
@@ -324,7 +324,7 @@ class lightcurve_methods:
                 )
             else:
                 light_curve = intrarun(
-                    is_simu=self.is_simu,
+                    is_DL4=self.is_DL4,
                     E1=self.e_inf_flux,
                     E2=self.e_sup_flux,
                     e_reco=None,

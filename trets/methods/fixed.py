@@ -28,7 +28,7 @@ __all__ = ['intrarun']
 
 
 def intrarun(
-    is_simu,
+    is_DL4,
     E1,
     E2,
     e_reco,
@@ -72,7 +72,7 @@ def intrarun(
         Light curve object.    
     """
 
-    if not is_simu:
+    if not is_DL4:
         geom = RegionGeom.create(region=on_region, axes=[e_reco])
 
         # create the dataset container object of the spectrum on the ON region
@@ -91,7 +91,7 @@ def intrarun(
     if time_bin is not None:
 
         #data at DL3
-        if not is_simu:
+        if not is_DL4:
             time_interval_obs = []
             for run in range(len(observations)):
                 time_interval_obs.append(
@@ -129,7 +129,7 @@ def intrarun(
     else:
         # only to match observations
         short_observations = observations
-        if not is_simu:
+        if not is_DL4:
             time_intervals = observations.ids
         else:
             time_intervals = observations.names
@@ -137,7 +137,7 @@ def intrarun(
     # loop for each run
     for obs_id, observation in zip(np.arange(len(time_intervals)), short_observations):
 
-        if not is_simu:
+        if not is_DL4:
             dataset = dataset_maker.run(dataset_empty.copy(name=str(obs_id)), observation)
             dataset_on_off = bkg_maker_reflected.run(dataset, observation)
         # No need to do the DL3->DL4 stage
