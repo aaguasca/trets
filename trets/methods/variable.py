@@ -348,8 +348,8 @@ class TRETS:
                 n_off = datasets_ONOFF.counts_off.data.sum()
 
                 if bool_bayesian:
-
-                    if n_on+n_off > 400:
+                    # too high value to compute factorials with enough precision
+                    if (n_on > 110 and n_off > 110) or (n_on > 15 and n_off > 110):
                         # compute W statistics
                         stat = WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
                         sig = stat.sqrt_ts
