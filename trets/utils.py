@@ -98,14 +98,16 @@ def get_TRETS_significance_threshold(flux_points):
     Obtain the significance threshold used to compute TRETS
     flux points in flux_points object.
     """
-    return flux_points.meta["sig-thd"]
+    if "sig-thd" in flux_points.meta.keys():
+        return flux_points.meta["sig-thd"]
 
 def get_TRETS_flux_significance(flux_points):
     """
     Obtain the significance detection for each time bin used to
     compute the flux points in flux_points object.
     """
-    return flux_points.meta["sig_detection"]
+    if "sig_detection" in flux_points.meta.keys():
+        return flux_points.meta["sig_detection"]
 
 def get_TRETS_binIterator(flux_points):
     """
@@ -123,7 +125,8 @@ def get_TRETS_flux_significance_thd(flux_points):
     Obtain the flux significance threshold used to compute TRETS
     flux points in flux_points object.
     """
-    return flux_points.meta["sig-flux-thd"]
+    if "sig-flux-thd" in flux_points.meta.keys():
+        return flux_points.meta["sig-flux-thd"]
 
 def conditional_ray(attr):
     """
