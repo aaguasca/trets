@@ -83,7 +83,8 @@ class BayesianProbability:
 
     def poisson_dist(self, _lambda, n):
         """
-        Probability mass function of a Poissonian distribution.
+        Probability mass function of a Poissonian distribution. Faster than scipy.stats.poisson
+        if the loop to compute poission_dist < 50 events.
         
         Parameters
         ----------
@@ -202,7 +203,8 @@ class BayesianProbability:
                     self.proba.append(C*poss)
         else:
             if mu_s == 0:
-                # C = self._normalized_coeff_binomial_expansion(event_i=0
+                #C = self._normalized_coeff_binomial_expansion(event_i=0)
+                #self.proba = np.array(C)
                 C = self._log_normalized_0_coeff_binomial_expansion()
                 self.proba = np.exp(np.array(C))
             else:
