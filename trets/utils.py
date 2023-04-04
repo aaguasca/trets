@@ -28,7 +28,7 @@ __all__ = [
     "split_observations",
     "subrun_split",
     "fraction_outside_interval",
-    "variance_error_prop_calculation",
+    "weighted_average_error_calculation",
     "write_TRETS_fluxpoints",
     "get_intervals_sum",
     "split_data_from_intervals"
@@ -346,21 +346,23 @@ def fraction_outside_interval(x, xmin, xmax):
         inf = 0
     return inf+sup
 
-def variance_error_prop_calculation(errors, weights):
+def weighted_average_error_calculation(errors, weights):
     """
-    Compute the squared error of the weighted mean
-    through error propagation.
+    Compute the squared error of the weighted average
+    through error propagation of each term.
+
+    \delta_E = (w_1\delta a_1)**2 + (w_2\delta a_2)**2 + ...
     
     Parameters
     ----------
     errors:
         Intrinsic errors of each measurement.
     weights:
-        weighted value for each measurement.
+        Weighted value for each measurement.
         
     Returns
     -------
-    squared_mean_error:
+    squared_weighted_average_error:
         squared error of the weighted mean.
     """
     weights = np.array(weights)
@@ -368,9 +370,9 @@ def variance_error_prop_calculation(errors, weights):
         norm_weights = weights/np.sum(weights)
     else:
         norm_weights = weights
-    squared_mean_error = np.sum((np.array(errors)*norm_weights)**2)
+    squared_weighted_average_error = np.sum((np.array(errors)*norm_weights)**2)
     
-    return squared_mean_error
+    return squared_weighted_average_error
 
 
 def write_TRETS_fluxpoints(filename, flux_points, **kwargs):

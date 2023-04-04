@@ -7,7 +7,7 @@ import numpy as np
 from trets.utils import (
     split_observations,
     fraction_outside_interval,
-    variance_error_prop_calculation
+    weighted_average_error_calculation
 )
 from trets.methods.fixed import intrarun
 from trets.methods.variable import TRETS
@@ -515,7 +515,7 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
                 # variance of the distribution of the weighted fluxes
                 # variance=np.average((int_flux-flux_weighted_av)**2, weights=weights)
                 # variance using error propagation of the weighted average
-                variance = variance_error_prop_calculation(int_errflux, weights)
+                variance = weighted_average_error_calculation(int_errflux, weights)
 
             else:
                 variance = np.array(int_errflux[0])**2
