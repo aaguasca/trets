@@ -310,10 +310,10 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
 def fraction_outside_interval(x, xmin, xmax):
     """
     The normalized fraction of the interval [x[0],x[1]]
-    that is outside the interval [xmin,xmax].
+    that is outside the interval xmin,xmax.
 
-    If [x[0],x[1]]>[xmin,xmax], return > 0
-    Else, return = 0.
+    If x[0]<xmin or x[1]>xmax, return > 0, respectively.
+    Else, return = 0, respectively.
 
     Parameters
     ----------
@@ -322,9 +322,9 @@ def fraction_outside_interval(x, xmin, xmax):
         the start value of the interval and the value
         in the second argument the stop value of the interval.
     xmin: float or int
-        Minimum value.
+        The reference minimum value.
     xmax: float or int
-        Maximum value.
+        Ther reference maximum value.
 
     Returns
     -------
@@ -332,16 +332,19 @@ def fraction_outside_interval(x, xmin, xmax):
     """
     frac_sup = np.max(x) - xmax
     frac_inf = xmin - np.min(x)
-    if frac_sup > 0:
+    if frac_sup > 0 and frac_inf <= 0:
         sup = (np.max(x)-xmax)/(np.max(x)-np.min(x))
+        inf = 0
+    elif frac_inf > 0 and frac_sup <= 0:
+        inf = 1-(np.max(x)-xmin)/(np.max(x)-np.min(x))
+        sup = 0
+    elif frac_inf > 0 and frac_sup > 0:
+        sup = (np.max(x)-xmax)/(np.max(x)-np.min(x))
+        inf = 1-(np.max(x)-xmin)/(np.max(x)-np.min(x))
     else:
         sup = 0
-    if frac_inf > 0:
-        inf = (np.max(x)-xmin)/(np.max(x)-np.min(x))
-    else:
         inf = 0
     return inf+sup
-
 
 def variance_error_prop_calculation(errors, weights):
     """

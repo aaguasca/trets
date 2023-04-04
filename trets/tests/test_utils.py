@@ -18,3 +18,32 @@ def test_get_intervals_output_type(data):
 def test_get_intervals_last_element(data):
     selected_data = get_intervals(data, 2)
     assert selected_data[-1] == data[-1]
+
+def test_fraction_outside_interval():
+    x = [0, 10]
+    xmin = 3
+    xmax = 7
+    expected_output = 0.6
+    output = fraction_outside_interval(x, xmin, xmax)
+    assert np.isclose(output, expected_output)
+
+    x = [0, 10]
+    xmin = -3
+    xmax = 13
+    expected_output = 0.0
+    output = fraction_outside_interval(x, xmin, xmax)
+    assert np.isclose(output, expected_output)
+
+    x = [0, 10]
+    xmin = 5
+    xmax = 15
+    expected_output = 0.5
+    output = fraction_outside_interval(x, xmin, xmax)
+    assert np.isclose(output, expected_output)
+
+    x = [0, 10]
+    xmin = -5
+    xmax = 5
+    expected_output = 0.5
+    output = fraction_outside_interval(x, xmin, xmax)
+    assert np.isclose(output, expected_output)
