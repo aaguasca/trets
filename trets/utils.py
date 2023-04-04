@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # Licensed under a 3-clause BSD style license - see LICENSE
-
+import astropy.units
 from astropy.time import Time
 import astropy.units as u
 from astropy.io import fits
@@ -168,25 +168,31 @@ def read_TRETS_fluxpoints(filename):
 
 def split_observations(observations, threshold_time):
     """
-    Split the dataset of observations into subsets where the interval between observations is
+    Split the dataset of observations into subsets where the time interval between observations is
     lower than threshold_time.
 
     Parameters
     ----------
-    observations:
+    observations: gammapy.data.Observations
         Observations object desired to split.
-    threshold_time: astropy.Quantity
+    threshold_time: astropy.units.Quantity
         Threshold time between observations to consider them as in the same dataset.
 
     Returns
     -------
     split_obs: list
-        list of Observations objects split according to threshold_time
+        List of Observations objects. Each index contain all observations with the stop time of the i-th
+        observation and the start time of the (i+1)-th is lower than threshold_time
     """
     split_obs = []
     joined_runs = []
     last = False
     prev_run_join = False
+    if not isinstance(threshold_time, u.Quantity):
+        raise ValueError("threshold_time must be an astropy Quantity")
+    if threshold_time.unit.is_equivalent(u.s):
+        raise ValueError("The units of threshold_time must be equivalent to time units")
+
     for i in range(len(observations)-1):
         if not prev_run_join:
             joined_runs.append(observations[i])
