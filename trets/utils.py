@@ -449,6 +449,22 @@ def get_intervals_sum(start, stop, thd_sum, digit_res=5):
 
 
 def split_data_from_intervals(data, intervals, start, stop):
+    """
+    Divide data based on the specified intervals and the
+    start and stop of the data.
+
+    Parameters
+    ----------
+    data:
+        Data to split
+    intervals: list
+        list of lists with the first index the start
+        and the second index the stop of the interval.
+    start:
+        The values of the start of the data
+    stop:
+        The values of the stop of the data
+    """
     split_data = []
     for i, (ini, end) in enumerate(intervals):
         arg_i = np.argwhere(start == ini)[0, 0]

@@ -34,12 +34,10 @@ from gammapy.estimators import (
 from gammapy.stats import (
     WStatCountsStatistic,
 )
-import ray
 
 __all__ = ['TRETS']
 
 
-#@ray.remote
 class TRETS:
     def __init__(self, parallelization, bool_eventbin_iterate):
 
@@ -176,8 +174,8 @@ class TRETS:
         thres_time_twoobs: astropy.Units
             Threshold time to consider two consecutive runs. Use events from several runs 
             to compute the integral flux.
-        time_bin: astropy.Quantity
-            Time added in each iteration.
+        bin_iterate: astropy.Quantity
+            Quantity added in each iteration. Time or number of events.
         observations: `gammapy.data.Observations`
             Observation object with the runs used to compute the light curve.
         bkg_maker_reflected:
@@ -418,12 +416,13 @@ class TRETS:
                 if n_on < n_on_thd or n_off < n_off_thd or sig < sig_threshold:
                     bool_pass = True
 
+                    # last bin
                     if arg_stop_time == len(time_array)-1:
 
                         # there is another observation in the observation container
                         if np.argwhere(np.array(observations_id) == id)[0, 0] < len(observations)-1:
 
-                            # time between two observations lower than the threshold
+                            # time between the two observations is lower than the threshold
                             if (observations[int(np.argwhere(np.array(observations_id) == id)[0, 0]+1)].gti.time_start.tt - \
                                 obs.gti.time_stop.tt).to(thres_time_twoobs.unit) < thres_time_twoobs:
 
@@ -438,19 +437,21 @@ class TRETS:
                                 if print_check == 2:
                                     print("+++++++++ Append dataset from obs %s in the dataset container +++++++++" % id)
 
-                            else:  # time between two observations higher than the threshold
+                            # time between two observations higher than the threshold
+                            else:
                                 sig_ul = sig
                                 keep_dataset_bool = False
 
                                 # delete the memory of any dataset_on_off saved previously for the future run
                                 prev_dataset = Datasets()
 
-                        else:  # is the last observation
+                        # is the last observation
+                        else:
                             sig_ul = sig
                             keep_dataset_bool = False
 
                         # compute UL
-                        # compute flux upper limit when the next observation starts later than the threshold
+                        # compute flux upper limit if the next observation starts later than the threshold or last run
                         if keep_dataset_bool is False:
 
                             # set the model we use to estimate the light curve
@@ -514,7 +515,7 @@ class TRETS:
                         bool_pass = True
 
                         if arg_stop_time == len(time_array)-1:
-                            bool_last_even = False
+
                             # there is another observation in the observation container
                             if np.argwhere(np.array(observations_id) == id)[0, 0] < len(observations)-1:
 
