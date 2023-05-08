@@ -168,12 +168,12 @@ class lightcurve_methods:
                             bool_bayesian=self.bool_bayesian
                         )
                     else:
-                        parallelization_TRETS = TRETS.remote(
+                        parallelization_TRETS = TRETS(
                             parallelization=self.is_ray,
                             bool_eventbin_iterate=False
                         )
                         #Following: https://stackoverflow.com/a/52903322
-                        futures = parallelization_TRETS.TRETS_algorithm.remote(
+                        futures = parallelization_TRETS.TRETS_algorithm().remote(
                             parallelization_TRETS,
                             is_DL4=self.is_DL4,
                             E1=self.e_inf_flux,

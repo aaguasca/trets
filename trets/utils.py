@@ -190,7 +190,7 @@ def split_observations(observations, threshold_time):
     prev_run_join = False
     if not isinstance(threshold_time, u.Quantity):
         raise ValueError("threshold_time must be an astropy Quantity")
-    if threshold_time.unit.is_equivalent(u.s):
+    if not threshold_time.unit.is_equivalent(u.s):
         raise ValueError("The units of threshold_time must be equivalent to time units")
 
     for i in range(len(observations)-1):
