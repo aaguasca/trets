@@ -129,12 +129,17 @@ class lightcurve_methods:
         Run the light curve methods
         """
         
-        t_start = time.time() 
+        t_start = time.time()
         if self.script_name == "TRETS":
-            split_obs = split_observations(
-                self.observations,
-                self.thres_time_twoobs
-            )
+
+            if not self.is_DL4:
+                split_obs = split_observations(
+                    self.observations,
+                    self.thres_time_twoobs
+                )
+            # data at DL4
+            else:
+                split_obs = self.observations
 
             # TRETS parallelization with ray
             if self.parallelization:
@@ -221,7 +226,8 @@ class lightcurve_methods:
                         bool_eventbin_iterate=self.bool_eventbin_iterate
                     )
 
-                    light_curve, sig_column = algorithm_TRETS_local.TRETS_algorithm(
+                    light_curve, sig_column = algorithm_TRETS_local.TRETS_algorithm()(
+                        algorithm_TRETS_local,
                         is_DL4=self.is_DL4,
                         E1=self.e_inf_flux,
                         E2=self.e_sup_flux,
@@ -244,7 +250,8 @@ class lightcurve_methods:
                         bool_eventbin_iterate=False
                     )
 
-                    light_curve, sig_column = algorithm_TRETS_local.TRETS_algorithm(
+                    light_curve, sig_column = algorithm_TRETS_local.TRETS_algorithm()(
+                        algorithm_TRETS_local,
                         is_DL4=self.is_DL4,
                         E1=self.e_inf_flux,
                         E2=self.e_sup_flux,
