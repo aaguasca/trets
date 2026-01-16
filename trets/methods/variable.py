@@ -37,7 +37,7 @@ class TRETS:
         else:
             self.is_ray = False
 
-    def iterate_timewise(self, time_bin, event_time_array, obs_time_ref):
+    def iterate_timewise(self, time_bin, event_time_array):
         """
         Compute the time edges to filter the observation to run
         TRETS using a fixed time interval of time_bin.
@@ -49,8 +49,6 @@ class TRETS:
         event_time_array: `numpy.ndarray`
             Numpy array with the trigger time of the events in the observation. The time
             interval is given in seconds w.r.t. the reference time of the observation.
-        obs_time_ref: `astropy.time.core.Time`
-            Reference time of the observation.
         Returns
         -------
         time_array: `astropy.time.core.Time`
@@ -59,23 +57,23 @@ class TRETS:
 
         if not time_bin.unit.is_equivalent(u.s):
             raise ValueError("Specify the interval of time using time quantity unit.")
+        assert isinstance(event_time_array, Time)
 
-        event_tini = event_time_array[0] * u.s
-        event_tstop = event_time_array[-1] * u.s
+        event_tini = event_time_array[0].mjd
+        event_tstop = event_time_array[-1].mjd
 
-        dt = event_tstop - event_tini
+        dt = (event_tstop - event_tini) * u.d
         list_t = np.linspace(
             0, dt.to_value("s"), int(np.ceil(dt.to_value("s") / time_bin.to_value("s")))
         )
 
-        # TODO: investigate why using obs.gti.time_start.tt.mjd and removing event_time_array[0] I loose events
-        time_array = obs_time_ref.tt + Quantity(event_tini.to_value("s") + list_t, "s")
+        time_array = event_time_array[0] + Quantity(list_t, "s")
         method_name = "time-bin-method"
         print(f"Using {method_name}")
 
         return time_array, time_bin, method_name
 
-    def iterate_eventwise(self, event_bin, event_time_array, obs_time_ref):
+    def iterate_eventwise(self, event_bin, event_time_array):
         """
         Compute the time edges to filter the observation to run
         TRETS using a fixed number of events of event_bin=Non+Noff.
@@ -87,8 +85,6 @@ class TRETS:
         event_time_array: `numpy.ndarray`
             Numpy array with the trigger time of the events in the observation. The time
             interval is given in seconds w.r.t. the reference time of the observation.
-        obs_time_ref: `astropy.time.core.Time`
-            Reference time of the observation.
         Returns
         -------
         time_array: `astropy.time.core.Time`
@@ -99,8 +95,7 @@ class TRETS:
             raise ValueError("Specify the interval of events using dimensionless unit.")
 
         print(int(event_bin.to_value("")))
-        list_t = get_intervals(event_time_array, int(event_bin))
-        time_array = obs_time_ref + Quantity(list_t, "s")
+        time_array = get_intervals(event_time_array, int(event_bin))
         method_name = "event-bin-method"
         print(f"Using {method_name}")
 
@@ -242,35 +237,25 @@ class TRETS:
                     )
                     print("OBS gti Tstart (TT):", observations[0].gti.time_start.tt.iso)
                     print("OBS gti Tstop (TT):", observations[0].gti.time_stop.tt.iso)
+                    print(observations[0].events.table["TIME"][0])
                     print(
                         "first event time (TT)",
-                        (
-                            observations[0].gti.time_ref.tt
-                            + Quantity(
-                                observations[0].events.table["TIME"][0], "second"
-                            )
-                        ).iso,
+                        observations[0].events.table["TIME"][0].tt.iso,
                     )
                     print(
                         "last event time (TT)",
-                        (
-                            observations[0].gti.time_ref.tt
-                            + Quantity(
-                                observations[0].events.table["TIME"][-1], "second"
-                            )
-                        ).iso,
+                        observations[0].events.table["TIME"][-1].tt.iso,
                     )
                     event_id = obs.events.table["EVENT_ID"].data
                 else:
                     print(f"OBSERVATION ID: {id}.")
 
             if not is_DL4:
-                event_time = obs.events.table["TIME"].data
+                event_time = obs.events.table["TIME"]
                 interval_method = self.produce_intervals_method()
                 time_array, bin_iterate, method_name = interval_method(
                     bin_iterate,
                     event_time_array=event_time,
-                    obs_time_ref=obs.gti.time_ref.tt,
                 )
 
             # for DL4 data, the events in the dataset do not have trigger time info
@@ -414,15 +399,15 @@ class TRETS:
                         print(f"stop time observation {id}, {obs.gti.time_stop.tt.iso}")
                         print(
                             "arg first subobs event in observation",
-                            np.argwhere(
-                                event_time == subobs.events.table["TIME"].data[0]
-                            )[0, 0],
+                            np.argwhere(event_time == subobs.events.table["TIME"][0])[
+                                0, 0
+                            ],
                         )
                         print(
                             "arg first subobs event in observation",
-                            np.argwhere(
-                                event_time == subobs.events.table["TIME"].data[-1]
-                            )[0, 0],
+                            np.argwhere(event_time == subobs.events.table["TIME"][-1])[
+                                0, 0
+                            ],
                         )
                         print("time first event", t_0.tt.iso)
                         print("-check gti start subobs-", subobs.gti.time_start.tt.iso)
@@ -574,11 +559,11 @@ class TRETS:
                                         % (
                                             np.argwhere(
                                                 event_time
-                                                == subobs.events.table["TIME"].data[0]
+                                                == subobs.events.table["TIME"][0]
                                             )[0, 0],
                                             np.argwhere(
                                                 event_time
-                                                == subobs.events.table["TIME"].data[-1]
+                                                == subobs.events.table["TIME"][-1]
                                             )[0, 0],
                                             sig_ul,
                                         )
@@ -733,15 +718,11 @@ class TRETS:
                                             % (
                                                 np.argwhere(
                                                     event_time
-                                                    == subobs.events.table["TIME"].data[
-                                                        0
-                                                    ]
+                                                    == subobs.events.table["TIME"][0]
                                                 )[0, 0],
                                                 np.argwhere(
                                                     event_time
-                                                    == subobs.events.table["TIME"].data[
-                                                        -1
-                                                    ]
+                                                    == subobs.events.table["TIME"][-1]
                                                 )[0, 0],
                                                 sig_ul,
                                                 sqrt_ts_flux_ul,
@@ -821,12 +802,10 @@ class TRETS:
                                 )
                                 if not is_DL4:
                                     index_start = np.argwhere(
-                                        event_time
-                                        == subobs.events.table["TIME"].data[0]
+                                        event_time == subobs.events.table["TIME"][0]
                                     )[0, 0]
                                     index_stop = np.argwhere(
-                                        event_time
-                                        == subobs.events.table["TIME"].data[-1]
+                                        event_time == subobs.events.table["TIME"][-1]
                                     )[0, 0]
                                     print(
                                         f"events' bin: {index_start} to {index_stop} with {prev_events} events"
@@ -848,11 +827,11 @@ class TRETS:
                                         % (
                                             np.argwhere(
                                                 event_time
-                                                == subobs.events.table["TIME"].data[0]
+                                                == subobs.events.table["TIME"][0]
                                             )[0, 0],
                                             np.argwhere(
                                                 event_time
-                                                == subobs.events.table["TIME"].data[-1]
+                                                == subobs.events.table["TIME"][-1]
                                             )[0, 0],
                                             sig,
                                             sqrt_ts_flux,
