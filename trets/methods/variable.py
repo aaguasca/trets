@@ -1,29 +1,18 @@
 #!/usr/bin/env python
 # Licensed under a 3-clause BSD style license - see LICENSE
 
-from trets.utils import (
-    conditional_ray,
-    get_intervals
-)
+from trets.utils import conditional_ray, get_intervals
 from trets.bayes import BayesianProbability
-from astropy.time import (
-    Time
-)
+from astropy.time import Time
 import astropy.units as u
 from astropy.units import Quantity
 from astropy.table import vstack, Table
 
 import numpy as np
 import copy
-from gammapy.makers import (
-    SpectrumDatasetMaker
-)
-from gammapy.maps import (
-    RegionGeom
-)
-from gammapy.data import (
-    ObservationFilter
-)
+from gammapy.makers import SpectrumDatasetMaker
+from gammapy.maps import RegionGeom
+from gammapy.data import ObservationFilter
 from gammapy.datasets import (
     Datasets,
     SpectrumDataset,
@@ -35,7 +24,7 @@ from gammapy.stats import (
     WStatCountsStatistic,
 )
 
-__all__ = ['TRETS']
+__all__ = ["TRETS"]
 
 
 class TRETS:
@@ -75,7 +64,9 @@ class TRETS:
         event_tstop = event_time_array[-1] * u.s
 
         dt = event_tstop - event_tini
-        list_t = np.linspace(0, dt.to_value("s"), int(np.ceil(dt.to_value("s") / time_bin.to_value("s"))))
+        list_t = np.linspace(
+            0, dt.to_value("s"), int(np.ceil(dt.to_value("s") / time_bin.to_value("s")))
+        )
 
         # TODO: investigate why using obs.gti.time_start.tt.mjd and removing event_time_array[0] I loose events
         time_array = obs_time_ref.tt + Quantity(event_tini.to_value("s") + list_t, "s")
@@ -121,7 +112,7 @@ class TRETS:
         else:
             return self.iterate_timewise
 
-    @conditional_ray('is_ray')
+    @conditional_ray("is_ray")
     def TRETS_algorithm(
         self,
         is_DL4,
@@ -197,9 +188,7 @@ class TRETS:
             print("Running TRETS at DL3 level (real data)")
             geom = RegionGeom.create(region=on_region, axes=[e_reco])
 
-            dataset_empty = SpectrumDataset.create(
-                geom, energy_axis_true=e_true
-            )
+            dataset_empty = SpectrumDataset.create(geom, energy_axis_true=e_true)
             dataset_maker = SpectrumDatasetMaker(
                 containment_correction=False, selection=["counts", "exposure", "edisp"]
             )
@@ -207,8 +196,10 @@ class TRETS:
 
         else:
             print("Running TRETS at DL4 level (simulations or binned real data)")
-            print("DL3 specifications {e_reco, e_true, on_region, time_bin, bkg_maker_reflected} will not be "
-                  "considered... Using the Dataset objects specifications!")
+            print(
+                "DL3 specifications {e_reco, e_true, on_region, time_bin, bkg_maker_reflected} will not be "
+                "considered... Using the Dataset objects specifications!"
+            )
             observations_id = observations.names
 
         print(" ")
@@ -229,8 +220,8 @@ class TRETS:
             reoptimize=False,
             n_sigma=1,
             n_sigma_ul=2,
-            selection_optional=['all'],
-            atol=Quantity(1e-6, "s")
+            selection_optional=["all"],
+            atol=Quantity(1e-6, "s"),
         )
 
         if bool_bayesian:
@@ -246,22 +237,28 @@ class TRETS:
                 print(" ")
                 print(" ")
                 if not is_DL4:
-                    print(f"OBSERVATION ID: {id}. Total number of events: {len(obs.events.table)}")
+                    print(
+                        f"OBSERVATION ID: {id}. Total number of events: {len(obs.events.table)}"
+                    )
                     print("OBS gti Tstart (TT):", observations[0].gti.time_start.tt.iso)
                     print("OBS gti Tstop (TT):", observations[0].gti.time_stop.tt.iso)
                     print(
                         "first event time (TT)",
                         (
-                            observations[0].gti.time_ref.tt +
-                            Quantity(observations[0].events.table["TIME"][0], "second")
-                        ).iso
+                            observations[0].gti.time_ref.tt
+                            + Quantity(
+                                observations[0].events.table["TIME"][0], "second"
+                            )
+                        ).iso,
                     )
                     print(
                         "last event time (TT)",
                         (
-                            observations[0].gti.time_ref.tt +
-                            Quantity(observations[0].events.table["TIME"][-1], "second")
-                        ).iso
+                            observations[0].gti.time_ref.tt
+                            + Quantity(
+                                observations[0].events.table["TIME"][-1], "second"
+                            )
+                        ).iso,
                     )
                     event_id = obs.events.table["EVENT_ID"].data
                 else:
@@ -271,9 +268,9 @@ class TRETS:
                 event_time = obs.events.table["TIME"].data
                 interval_method = self.produce_intervals_method()
                 time_array, bin_iterate, method_name = interval_method(
-                        bin_iterate,
-                        event_time_array=event_time,
-                        obs_time_ref=obs.gti.time_ref.tt
+                    bin_iterate,
+                    event_time_array=event_time,
+                    obs_time_ref=obs.gti.time_ref.tt,
                 )
 
             # for DL4 data, the events in the dataset do not have trigger time info
@@ -284,21 +281,31 @@ class TRETS:
             if print_check != 0:
                 if not is_DL4:
                     if bin_iterate.unit.is_unity():
-                        print("Time bin width used", ((time_array[1].mjd-time_array[0].mjd)*u.d).to("s"))
+                        print(
+                            "Time bin width used",
+                            ((time_array[1].mjd - time_array[0].mjd) * u.d).to("s"),
+                        )
                     else:
-                        print("Time bin width used", ((time_array[1].mjd-time_array[0].mjd)*u.d).to(bin_iterate.unit))
+                        print(
+                            "Time bin width used",
+                            ((time_array[1].mjd - time_array[0].mjd) * u.d).to(
+                                bin_iterate.unit
+                            ),
+                        )
                 else:
-                    print("Time bin width used", obs.gti.time_delta[0].to_value("s"), " s")
+                    print(
+                        "Time bin width used", obs.gti.time_delta[0].to_value("s"), " s"
+                    )
                 print("Total number of time bins edges:", len(time_array))
 
             arg_start_time = 0
-            for cont_t in range(len(time_array)-1):
+            for cont_t in range(len(time_array) - 1):
 
                 if bool_pass:
                     pass
                 else:
                     arg_start_time = cont_t
-                arg_stop_time = cont_t+1
+                arg_stop_time = cont_t + 1
 
                 if not is_DL4:
                     # filter the observation
@@ -317,7 +324,9 @@ class TRETS:
                     t_end = time_array[arg_stop_time]
 
                     # data reduction
-                    dataset = dataset_maker.run(dataset_empty.copy(name=str(arg_start_time)), subobs)
+                    dataset = dataset_maker.run(
+                        dataset_empty.copy(name=str(arg_start_time)), subobs
+                    )
                     dataset_on_off = bkg_maker_reflected.run(dataset, subobs)
 
                 # no need to filter a dataset. Copy the dataset and consider all events
@@ -336,12 +345,14 @@ class TRETS:
                         print(len(temp_dataset))
                         print(
                             "num events prev dataset:",
-                            Datasets(temp_dataset).stack_reduce().counts_off.data.sum() +
-                            Datasets(temp_dataset).stack_reduce().counts.data.sum()
+                            Datasets(temp_dataset).stack_reduce().counts_off.data.sum()
+                            + Datasets(temp_dataset).stack_reduce().counts.data.sum(),
                         )
                         print(
                             "num events this dataset:",
-                            dataset_on_off.counts_off.data.sum()+dataset_on_off.counts.data.sum())
+                            dataset_on_off.counts_off.data.sum()
+                            + dataset_on_off.counts.data.sum(),
+                        )
 
                     # append the new dataset_on_off
                     temp_dataset.append(dataset_on_off)
@@ -360,23 +371,25 @@ class TRETS:
                     # too high value to compute factorials with enough precision
                     if (n_on > 110 and n_off > 110) or (n_on > 15 and n_off > 110):
                         # compute W statistics
-                        stat = WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
+                        stat = WStatCountsStatistic(
+                            n_on=n_on, n_off=n_off, alpha=acc_on / acc_off
+                        )
                         sig = stat.sqrt_ts
                         # total TS obtained from the sum of the different bins
                         stat_sum_3bins_dataset = datasets_ONOFF.stat_sum()
                     else:
                         # bayesian inference
                         bayes = BayesianProbability(
-                            n_on=n_on,
-                            n_off=n_off,
-                            alpha=acc_on/acc_off
+                            n_on=n_on, n_off=n_off, alpha=acc_on / acc_off
                         )
                         sig = bayes.detection_significance()
                         stat_sum_3bins_dataset = sig
                 else:
 
                     # compute W statistics
-                    stat = WStatCountsStatistic(n_on=n_on, n_off=n_off, alpha=acc_on/acc_off)
+                    stat = WStatCountsStatistic(
+                        n_on=n_on, n_off=n_off, alpha=acc_on / acc_off
+                    )
                     sig = stat.sqrt_ts
                     # total TS obtained from the sum of the different bins
                     stat_sum_3bins_dataset = datasets_ONOFF.stat_sum()
@@ -385,19 +398,31 @@ class TRETS:
                 if print_check == 2:
                     print(" ")
                     print(" ")
-                    print(arg_start_time, " to ", arg_stop_time, ", total args:", len(time_array) - 1)
+                    print(
+                        arg_start_time,
+                        " to ",
+                        arg_stop_time,
+                        ", total args:",
+                        len(time_array) - 1,
+                    )
                     print("OBSERVATION ID:", id)
                     if not is_DL4:
                         # també es pot comprovat sumant el temps "s" de la taula amb gti de la dataset
-                        print(f"start time observation {id}, {obs.gti.time_start.tt.iso}")
+                        print(
+                            f"start time observation {id}, {obs.gti.time_start.tt.iso}"
+                        )
                         print(f"stop time observation {id}, {obs.gti.time_stop.tt.iso}")
                         print(
                             "arg first subobs event in observation",
-                            np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0]
+                            np.argwhere(
+                                event_time == subobs.events.table["TIME"].data[0]
+                            )[0, 0],
                         )
                         print(
                             "arg first subobs event in observation",
-                            np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0]
+                            np.argwhere(
+                                event_time == subobs.events.table["TIME"].data[-1]
+                            )[0, 0],
                         )
                         print("time first event", t_0.tt.iso)
                         print("-check gti start subobs-", subobs.gti.time_start.tt.iso)
@@ -405,24 +430,46 @@ class TRETS:
                         print("-check gti end subobs-", subobs.gti.time_stop.tt.iso)
                         print("dataset gti Tstart:", dataset.gti.time_start.tt.iso)
                         print("dataset gti Tstop:", dataset.gti.time_stop.tt.iso)
-                    print("dataset_on_off gti Tstart:", dataset_on_off.gti.time_start.tt.iso)
-                    print("dataset_on_off gti Tstop:", dataset_on_off.gti.time_stop.tt.iso)
-                    print("datasets_ONOFF gti Tstart:", datasets_ONOFF.gti.time_start.tt.iso)
-                    print("datasets_ONOFF gti Tstop:", datasets_ONOFF.gti.time_stop.tt.iso)
+                    print(
+                        "dataset_on_off gti Tstart:",
+                        dataset_on_off.gti.time_start.tt.iso,
+                    )
+                    print(
+                        "dataset_on_off gti Tstop:", dataset_on_off.gti.time_stop.tt.iso
+                    )
+                    print(
+                        "datasets_ONOFF gti Tstart:",
+                        datasets_ONOFF.gti.time_start.tt.iso,
+                    )
+                    print(
+                        "datasets_ONOFF gti Tstop:", datasets_ONOFF.gti.time_stop.tt.iso
+                    )
 
                     if not is_DL4:
                         print(
                             "first event ID:",
-                            event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[0])][0, 0]
+                            event_id[
+                                np.argwhere(
+                                    event_id == subobs.events.table["EVENT_ID"].data[0]
+                                )
+                            ][0, 0],
                         )
                         print(
                             "last event ID:",
-                            event_id[np.argwhere(event_id == subobs.events.table["EVENT_ID"].data[-1])][0, 0]
+                            event_id[
+                                np.argwhere(
+                                    event_id == subobs.events.table["EVENT_ID"].data[-1]
+                                )
+                            ][0, 0],
                         )
-                        print("num events subobs:", len(subobs.events.table["EVENT_ID"]))
+                        print(
+                            "num events subobs:", len(subobs.events.table["EVENT_ID"])
+                        )
                     print(
                         "num events dataset:",
-                        datasets_ONOFF.counts_off.data.sum()+datasets_ONOFF.counts.data.sum())
+                        datasets_ONOFF.counts_off.data.sum()
+                        + datasets_ONOFF.counts.data.sum(),
+                    )
 
                     print("######################")
                     print("non     noff     sig")
@@ -430,35 +477,51 @@ class TRETS:
                     print("######################")
                     print(datasets_ONOFF.info_dict()["sqrt_ts"])
                     print("counts On region:", datasets_ONOFF.counts.data.reshape(-1))
-                    print("counts Off region:", datasets_ONOFF.counts_off.data.reshape(-1))
+                    print(
+                        "counts Off region:", datasets_ONOFF.counts_off.data.reshape(-1)
+                    )
                     print("excess counts:", datasets_ONOFF.excess.data.reshape(-1))
                     print("stat_sum TS bins", stat_sum_3bins_dataset)
 
-    # ######################  NO passa el thd de sig ###################
+                # ######################  NO passa el thd de sig ###################
                 # loop until the bin satisfy these conditions
                 if n_on < n_on_thd or n_off < n_off_thd or sig < sig_threshold:
                     bool_pass = True
 
                     # last bin
-                    if arg_stop_time == len(time_array)-1:
+                    if arg_stop_time == len(time_array) - 1:
 
                         # there is another observation in the observation container
-                        if np.argwhere(np.array(observations_id) == id)[0, 0] < len(observations)-1:
+                        if (
+                            np.argwhere(np.array(observations_id) == id)[0, 0]
+                            < len(observations) - 1
+                        ):
 
                             # time between the two observations is lower than the threshold
                             if (
-                                    observations[
-                                        int(np.argwhere(np.array(observations_id) == id)[0, 0]+1)
-                                    ].gti.time_start.tt -
-                                    obs.gti.time_stop.tt
+                                observations[
+                                    int(
+                                        np.argwhere(np.array(observations_id) == id)[
+                                            0, 0
+                                        ]
+                                        + 1
+                                    )
+                                ].gti.time_start.tt
+                                - obs.gti.time_stop.tt
                             ).to(thres_time_twoobs.unit) < thres_time_twoobs:
 
-                                save_dataset_on_off = dataset_on_off.copy(name="counts left obsid %s" % id)
+                                save_dataset_on_off = dataset_on_off.copy(
+                                    name="counts left obsid %s" % id
+                                )
                                 # safe the dataset_on_off to keep it for the next observation loop
                                 prev_dataset.append(save_dataset_on_off)
                                 prev_events = (
-                                    Datasets(prev_dataset).stack_reduce().counts_off.data.sum() +
-                                    Datasets(prev_dataset).stack_reduce().counts.data.sum()
+                                    Datasets(prev_dataset)
+                                    .stack_reduce()
+                                    .counts_off.data.sum()
+                                    + Datasets(prev_dataset)
+                                    .stack_reduce()
+                                    .counts.data.sum()
                                 )
                                 sig_ul = sig
                                 keep_dataset_bool = True
@@ -490,45 +553,90 @@ class TRETS:
 
                             # estimate the light curve of the bin
                             lc_f = lc.run(copy.deepcopy(datasets_ONOFF))
-                            lc_f_table = lc_f.to_table(sed_type="flux", format="lightcurve")
+                            lc_f_table = lc_f.to_table(
+                                sed_type="flux", format="lightcurve"
+                            )
 
                             # Consider this point as UL
                             lc_f_table["is_ul"].data[0] = np.ones(
-                                shape=np.shape(lc_f_table["is_ul"].data[0]),
-                                dtype=bool
+                                shape=np.shape(lc_f_table["is_ul"].data[0]), dtype=bool
                             )
 
                             lc_list.append(lc_f_table)
 
                             if print_check == 1 or print_check == 2:
-                                print("---------------------------------------------------------------------------")
+                                print(
+                                    "---------------------------------------------------------------------------"
+                                )
                                 if not is_DL4:
-                                    print("events' bin: %.0f to %.0f.  Sig=%.1f -> UL!" % (
-                                        np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
-                                        np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
-                                        sig_ul)
+                                    print(
+                                        "events' bin: %.0f to %.0f.  Sig=%.1f -> UL!"
+                                        % (
+                                            np.argwhere(
+                                                event_time
+                                                == subobs.events.table["TIME"].data[0]
+                                            )[0, 0],
+                                            np.argwhere(
+                                                event_time
+                                                == subobs.events.table["TIME"].data[-1]
+                                            )[0, 0],
+                                            sig_ul,
+                                        )
                                     )
                                 else:
-                                    print("events' in binned dataset: 0 to 1.  Sig=%.3f -> UL!" % (
-                                        sig_ul)
+                                    print(
+                                        "events' in binned dataset: 0 to 1.  Sig=%.3f -> UL!"
+                                        % (sig_ul)
                                     )
-                                print("---------------------------------------------------------------------------")
+                                print(
+                                    "---------------------------------------------------------------------------"
+                                )
 
                             # !!!!!!!!CHECKS!!!!!!!!
                             if print_check == 2:
-                                print("time_min", Time(lc_f_table["time_min"][0], scale="tt", format="mjd").tt.iso)
-                                print("time_max", Time(lc_f_table["time_max"][0], scale="tt", format="mjd").tt.iso)
-                                print("dataset_on_off Tstart:", dataset_on_off.gti.time_start.tt.iso)
-                                print("dataset_on_off Tstop:", dataset_on_off.gti.time_stop.tt.iso)
-                                print("datasets_ONOFF Tstart:", datasets_ONOFF.gti.time_start.tt.iso)
-                                print("datasets_ONOFF Tstop:", datasets_ONOFF.gti.time_stop.tt.iso)
-                                print("---------------------------------------------------------------------------")
+                                print(
+                                    "time_min",
+                                    Time(
+                                        lc_f_table["time_min"][0],
+                                        scale="tt",
+                                        format="mjd",
+                                    ).tt.iso,
+                                )
+                                print(
+                                    "time_max",
+                                    Time(
+                                        lc_f_table["time_max"][0],
+                                        scale="tt",
+                                        format="mjd",
+                                    ).tt.iso,
+                                )
+                                print(
+                                    "dataset_on_off Tstart:",
+                                    dataset_on_off.gti.time_start.tt.iso,
+                                )
+                                print(
+                                    "dataset_on_off Tstop:",
+                                    dataset_on_off.gti.time_stop.tt.iso,
+                                )
+                                print(
+                                    "datasets_ONOFF Tstart:",
+                                    datasets_ONOFF.gti.time_start.tt.iso,
+                                )
+                                print(
+                                    "datasets_ONOFF Tstop:",
+                                    datasets_ONOFF.gti.time_stop.tt.iso,
+                                )
+                                print(
+                                    "---------------------------------------------------------------------------"
+                                )
                             sig_array.append(sig)
                         if print_check == 1 or print_check == 2:
                             print(" ")
 
-    # ################# SI passa el thd de sig ####################
-                if n_off > n_off_thd and n_on > n_on_thd and sig > sig_threshold:  # compute flux
+                # ################# SI passa el thd de sig ####################
+                if (
+                    n_off > n_off_thd and n_on > n_on_thd and sig > sig_threshold
+                ):  # compute flux
 
                     datasets_ONOFF.models = best_fit_spec_model  # set the model we use to estimate the light curve
 
@@ -545,25 +653,41 @@ class TRETS:
 
                         bool_pass = True
 
-                        if arg_stop_time == len(time_array)-1:
+                        if arg_stop_time == len(time_array) - 1:
 
                             # there is another observation in the observation container
-                            if np.argwhere(np.array(observations_id) == id)[0, 0] < len(observations)-1:
+                            if (
+                                np.argwhere(np.array(observations_id) == id)[0, 0]
+                                < len(observations) - 1
+                            ):
 
                                 # time between two observations lower than the threshold
                                 start_time_next_run = observations[
-                                    int(np.argwhere(np.array(observations_id) == id)[0, 0]+1)
+                                    int(
+                                        np.argwhere(np.array(observations_id) == id)[
+                                            0, 0
+                                        ]
+                                        + 1
+                                    )
                                 ].gti.time_start.tt
-                                time_diff = (start_time_next_run - obs.gti.time_stop.tt).to(thres_time_twoobs.unit)
+                                time_diff = (
+                                    start_time_next_run - obs.gti.time_stop.tt
+                                ).to(thres_time_twoobs.unit)
                                 if time_diff < thres_time_twoobs:
 
-                                    save_dataset_on_off = dataset_on_off.copy(name="counts left obsid %s" % id)
+                                    save_dataset_on_off = dataset_on_off.copy(
+                                        name="counts left obsid %s" % id
+                                    )
                                     # safe the dataset_on_off to keep it for the next observation loop
                                     prev_dataset.append(save_dataset_on_off)
 
                                     prev_events = (
-                                        Datasets(prev_dataset).stack_reduce().counts_off.data.sum() +
-                                        Datasets(prev_dataset).stack_reduce().counts.data.sum()
+                                        Datasets(prev_dataset)
+                                        .stack_reduce()
+                                        .counts_off.data.sum()
+                                        + Datasets(prev_dataset)
+                                        .stack_reduce()
+                                        .counts.data.sum()
                                     )
 
                                     sqrt_ts_flux_ul = sqrt_ts_flux
@@ -594,32 +718,81 @@ class TRETS:
                                 # consider this point as UL
                                 lc_f_table["is_ul"].data[0] = np.ones(
                                     shape=np.shape(lc_f_table["is_ul"].data[0]),
-                                    dtype=bool
+                                    dtype=bool,
                                 )
 
                                 lc_list.append(lc_f_table)
 
                                 if print_check == 1 or print_check == 2:
-                                    print("---------------------------------------------------------------------------")
+                                    print(
+                                        "---------------------------------------------------------------------------"
+                                    )
                                     if not is_DL4:
-                                        print("events' bin: %.0f to %.0f. detect_sig=%.3f, sqrt(TS)_flux=%.3f ->UL!" % (
-                                            np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
-                                            np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
-                                            sig_ul, sqrt_ts_flux_ul))
+                                        print(
+                                            "events' bin: %.0f to %.0f. detect_sig=%.3f, sqrt(TS)_flux=%.3f ->UL!"
+                                            % (
+                                                np.argwhere(
+                                                    event_time
+                                                    == subobs.events.table["TIME"].data[
+                                                        0
+                                                    ]
+                                                )[0, 0],
+                                                np.argwhere(
+                                                    event_time
+                                                    == subobs.events.table["TIME"].data[
+                                                        -1
+                                                    ]
+                                                )[0, 0],
+                                                sig_ul,
+                                                sqrt_ts_flux_ul,
+                                            )
+                                        )
                                     else:
-                                        print("events' bin: 0 to 1. detect_sig=%.3f, sqrt(TS)_flux=%.3f ->UL!" % (
-                                            sig_ul, sqrt_ts_flux_ul))
-                                    print("---------------------------------------------------------------------------")
+                                        print(
+                                            "events' bin: 0 to 1. detect_sig=%.3f, sqrt(TS)_flux=%.3f ->UL!"
+                                            % (sig_ul, sqrt_ts_flux_ul)
+                                        )
+                                    print(
+                                        "---------------------------------------------------------------------------"
+                                    )
 
                                 # !!!!!!!!CHECKS!!!!!!!!
                                 if print_check == 2:
-                                    print("time_min", Time(lc_f_table["time_min"][0], scale="tt", format="mjd").tt.iso)
-                                    print("time_max", Time(lc_f_table["time_max"][0], scale="tt", format="mjd").tt.iso)
-                                    print("dataset_on_off Tstart:", dataset_on_off.gti.time_start.tt.iso)
-                                    print("dataset_on_off Tstop:", dataset_on_off.gti.time_stop.tt.iso)
-                                    print("datasets_ONOFF Tstart:", datasets_ONOFF.gti.time_start.tt.iso)
-                                    print("datasets_ONOFF Tstop:", datasets_ONOFF.gti.time_stop.tt.iso)
-                                    print("---------------------------------------------------------------------------")
+                                    print(
+                                        "time_min",
+                                        Time(
+                                            lc_f_table["time_min"][0],
+                                            scale="tt",
+                                            format="mjd",
+                                        ).tt.iso,
+                                    )
+                                    print(
+                                        "time_max",
+                                        Time(
+                                            lc_f_table["time_max"][0],
+                                            scale="tt",
+                                            format="mjd",
+                                        ).tt.iso,
+                                    )
+                                    print(
+                                        "dataset_on_off Tstart:",
+                                        dataset_on_off.gti.time_start.tt.iso,
+                                    )
+                                    print(
+                                        "dataset_on_off Tstop:",
+                                        dataset_on_off.gti.time_stop.tt.iso,
+                                    )
+                                    print(
+                                        "datasets_ONOFF Tstart:",
+                                        datasets_ONOFF.gti.time_start.tt.iso,
+                                    )
+                                    print(
+                                        "datasets_ONOFF Tstop:",
+                                        datasets_ONOFF.gti.time_stop.tt.iso,
+                                    )
+                                    print(
+                                        "---------------------------------------------------------------------------"
+                                    )
                                 sig_array.append(sig)
 
                     # we save the flux point
@@ -627,20 +800,34 @@ class TRETS:
                         bool_pass = False
 
                         # not an upper limit
-                        lc_f_table["is_ul"].data[0] = np.zeros(shape=np.shape(lc_f_table["is_ul"].data[0]), dtype=bool)
+                        lc_f_table["is_ul"].data[0] = np.zeros(
+                            shape=np.shape(lc_f_table["is_ul"].data[0]), dtype=bool
+                        )
 
-                        lc_list.append(lc_f.to_table(sed_type="flux", format="lightcurve"))
+                        lc_list.append(
+                            lc_f.to_table(sed_type="flux", format="lightcurve")
+                        )
 
-                        if keep_dataset_bool is True:  # primer cop que calculo flux tenint en compte obs anterior
+                        if (
+                            keep_dataset_bool is True
+                        ):  # primer cop que calculo flux tenint en compte obs anterior
                             keep_dataset_bool = False
                             # as we have succesfully calculed the flux,
                             # delete the previous counts of the dataset container
                             prev_dataset = Datasets()
                             if print_check == 1 or print_check == 2:
-                                print("---------------------------------------------------------------------------")
+                                print(
+                                    "---------------------------------------------------------------------------"
+                                )
                                 if not is_DL4:
-                                    index_start = np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0]
-                                    index_stop = np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0]
+                                    index_start = np.argwhere(
+                                        event_time
+                                        == subobs.events.table["TIME"].data[0]
+                                    )[0, 0]
+                                    index_stop = np.argwhere(
+                                        event_time
+                                        == subobs.events.table["TIME"].data[-1]
+                                    )[0, 0]
                                     print(
                                         f"events' bin: {index_start} to {index_stop} with {prev_events} events"
                                         f"from previous obs. detect_sig={sig:1.3f}, sqrt(TS)_flux={sqrt_ts_flux:1.3f}"
@@ -652,32 +839,75 @@ class TRETS:
                                     )
                         else:
                             if print_check == 1 or print_check == 2:
-                                print("---------------------------------------------------------------------------")
+                                print(
+                                    "---------------------------------------------------------------------------"
+                                )
                                 if not is_DL4:
-                                    print("events' bin: %.0f to %.0f. detect_sig=%.3f, sqrt(TS)_flux=%.3f" % (
-                                        np.argwhere(event_time == subobs.events.table["TIME"].data[0])[0, 0],
-                                        np.argwhere(event_time == subobs.events.table["TIME"].data[-1])[0, 0],
-                                        sig, sqrt_ts_flux))
+                                    print(
+                                        "events' bin: %.0f to %.0f. detect_sig=%.3f, sqrt(TS)_flux=%.3f"
+                                        % (
+                                            np.argwhere(
+                                                event_time
+                                                == subobs.events.table["TIME"].data[0]
+                                            )[0, 0],
+                                            np.argwhere(
+                                                event_time
+                                                == subobs.events.table["TIME"].data[-1]
+                                            )[0, 0],
+                                            sig,
+                                            sqrt_ts_flux,
+                                        )
+                                    )
                                 else:
-                                    print("events' bin: 0 to 1. detect_sig=%.3f, sqrt(TS)_flux=%.3f" % (
-                                        sig, sqrt_ts_flux))
+                                    print(
+                                        "events' bin: 0 to 1. detect_sig=%.3f, sqrt(TS)_flux=%.3f"
+                                        % (sig, sqrt_ts_flux)
+                                    )
                         # !!!!!!!!CHECKS!!!!!!!!
                         if print_check == 2:
-                            print("---------------------------------------------------------------------------")
-                            print("time_min", Time(lc_f_table["time_min"][0], scale="tt", format="mjd").tt.iso)
-                            print("time_max", Time(lc_f_table["time_max"][0], scale="tt", format="mjd").tt.iso)
-                            print("dataset_on_off Tstart:", dataset_on_off.gti.time_start.tt.iso)
-                            print("dataset_on_off Tstop:", dataset_on_off.gti.time_stop.tt.iso)
-                            print("datasets_ONOFF Tstart:", datasets_ONOFF.gti.time_start.tt.iso)
-                            print("datasets_ONOFF Tstop:", datasets_ONOFF.gti.time_stop.tt.iso)
-                            print("---------------------------------------------------------------------------")
+                            print(
+                                "---------------------------------------------------------------------------"
+                            )
+                            print(
+                                "time_min",
+                                Time(
+                                    lc_f_table["time_min"][0], scale="tt", format="mjd"
+                                ).tt.iso,
+                            )
+                            print(
+                                "time_max",
+                                Time(
+                                    lc_f_table["time_max"][0], scale="tt", format="mjd"
+                                ).tt.iso,
+                            )
+                            print(
+                                "dataset_on_off Tstart:",
+                                dataset_on_off.gti.time_start.tt.iso,
+                            )
+                            print(
+                                "dataset_on_off Tstop:",
+                                dataset_on_off.gti.time_stop.tt.iso,
+                            )
+                            print(
+                                "datasets_ONOFF Tstart:",
+                                datasets_ONOFF.gti.time_start.tt.iso,
+                            )
+                            print(
+                                "datasets_ONOFF Tstop:",
+                                datasets_ONOFF.gti.time_stop.tt.iso,
+                            )
+                            print(
+                                "---------------------------------------------------------------------------"
+                            )
                         sig_array.append(sig)
 
         # stack al the flux point tables into a single table
         light_curve = vstack(lc_list)
 
         # add the detection significance value
-        sig_column = Table(data=[sig_array], names=["sig_detection"], dtype=[np.float32])
+        sig_column = Table(
+            data=[sig_array], names=["sig_detection"], dtype=[np.float32]
+        )
         light_curve.meta.update({"sig-thd": sig_threshold})
         light_curve.meta.update({"sig-flux-thd": sqrt_TS_flux_UL_threshold})
         if not is_DL4:

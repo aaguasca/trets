@@ -30,8 +30,7 @@ __all__ = [
     "weighted_average_error_calculation",
     "write_TRETS_fluxpoints",
     "get_intervals_sum",
-    "split_data_from_intervals"
-
+    "split_data_from_intervals",
 ]
 
 
@@ -75,7 +74,7 @@ def get_intervals(data, n):
             raise ValueError("data has more than one dimension")
 
     selected_data = data[::n]
-    if (len(data)-1) % n != 0:
+    if (len(data) - 1) % n != 0:
         selected_data = np.concatenate((selected_data, [data[-1]]))
     return selected_data
 
@@ -141,7 +140,6 @@ def conditional_ray(attr):
     """
 
     def decorator(func):
-
         def inner(*args, **kwargs):
 
             is_ray = getattr(args[0], attr)
@@ -199,30 +197,32 @@ def split_observations(observations, threshold_time):
     if not threshold_time.unit.is_equivalent(u.s):
         raise ValueError("The units of threshold_time must be equivalent to time units")
 
-    for i in range(len(observations)-1):
+    for i in range(len(observations) - 1):
         if not prev_run_join:
             joined_runs.append(observations[i])
 
-        sep_time = (observations[i+1].gti.time_start - observations[i].gti.time_stop).to(threshold_time.unit)
+        sep_time = (
+            observations[i + 1].gti.time_start - observations[i].gti.time_stop
+        ).to(threshold_time.unit)
         # print(observations[i].obs_id,observations[i+1].obs_id,sep_time)
 
         if sep_time < threshold_time:
-            joined_runs.append(observations[i+1])
+            joined_runs.append(observations[i + 1])
             prev_run_join = True
-            if i == len(observations)-2:
+            if i == len(observations) - 2:
                 last = True
         else:
             split_obs.append(Observations(joined_runs))
             joined_runs = []
             prev_run_join = False
-            if i == len(observations)-2:
+            if i == len(observations) - 2:
                 last = True
 
         if last is True and prev_run_join is True:
             split_obs.append(Observations(joined_runs))
 
         if last is True and prev_run_join is False:
-            split_obs.append(Observations([observations[i+1]]))
+            split_obs.append(Observations([observations[i + 1]]))
 
     return split_obs
 
@@ -256,47 +256,61 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
         t0 = time_run.tt.mjd[0]
         tf = time_run.tt.mjd[-1]
 
-        dt = ((tf-t0)*u.d).to_value("min")
-        sections = dt/interval_subrun.to_value("min")
+        dt = ((tf - t0) * u.d).to_value("min")
+        sections = dt / interval_subrun.to_value("min")
 
         if sections < 1:
             time_intervals.append(Time([t0, tf], format="mjd", scale="tt"))
         else:
-            if round(sections)-round(sections, int(-math.log10(atol))) == 0:
-                ti = t0+interval_subrun.to_value("d")
-                t_end = tf-interval_subrun.to_value("d")
+            if round(sections) - round(sections, int(-math.log10(atol))) == 0:
+                ti = t0 + interval_subrun.to_value("d")
+                t_end = tf - interval_subrun.to_value("d")
             else:
-                if np.modf(sections)[0] > 0.6 or np.modf(sections)[0] < 0.4 or sections < 4:
+                if (
+                    np.modf(sections)[0] > 0.6
+                    or np.modf(sections)[0] < 0.4
+                    or sections < 4
+                ):
                     if np.modf(sections)[0] < 0.4:
-                        ti = t0+interval_subrun.to_value("d")*(1+np.modf(sections)[0])
+                        ti = t0 + interval_subrun.to_value("d") * (
+                            1 + np.modf(sections)[0]
+                        )
                     else:
-                        ti = t0+interval_subrun.to_value("d")*(np.modf(sections)[0])
+                        ti = t0 + interval_subrun.to_value("d") * (np.modf(sections)[0])
                     if int(sections) == 1:
                         t_end = ti
                     else:
-                        t_end = tf-interval_subrun.to_value("d")
+                        t_end = tf - interval_subrun.to_value("d")
                 else:
                     # select the time that correspond to the end of the first subrun if we add half of the
                     # residual to this run
-                    ti = t0+interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
+                    ti = t0 + interval_subrun.to_value("d") * (
+                        1 + abs(int(sections) - sections) / 2
+                    )
                     # select the time that correspond to the end of the last subrun if we add half of the
                     # residual to this run
-                    t_end = tf-interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
+                    t_end = tf - interval_subrun.to_value("d") * (
+                        1 + abs(int(sections) - sections) / 2
+                    )
 
             # obtain the initial and final time of subruns with the same time interval as "interval_subrun"
             if int(sections) == 1:  # for values 1<sections<2
                 interval = np.linspace(ti, t_end, 1)
             else:
-                if np.modf(sections)[0] > 0.6 or np.modf(sections)[0] < 0.4 or sections < 4:
+                if (
+                    np.modf(sections)[0] > 0.6
+                    or np.modf(sections)[0] < 0.4
+                    or sections < 4
+                ):
                     if np.modf(sections)[0] < 0.4:
-                        interval = np.linspace(ti, t_end, int(sections)-1)
+                        interval = np.linspace(ti, t_end, int(sections) - 1)
                     else:
                         interval = np.linspace(ti, t_end, int(sections))
                 else:
-                    if round(sections)-round(sections, int(-math.log10(atol))) == 0:
+                    if round(sections) - round(sections, int(-math.log10(atol))) == 0:
                         interval = np.linspace(ti, t_end, int(sections))
                     else:
-                        interval = np.linspace(ti, t_end, int(sections)-1)
+                        interval = np.linspace(ti, t_end, int(sections) - 1)
 
             if int(sections) == 1 and np.modf(sections)[0] < 0.4:
                 time_intervals.append(Time([t0, tf], format="mjd", scale="tt"))
@@ -304,14 +318,17 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
                 for i in range(len(interval)):
                     # replace the initial time of the first subrun to consider the residual
                     if i == 0:
-                        intervals.append(Time(t0, format='mjd', scale="tt"))
+                        intervals.append(Time(t0, format="mjd", scale="tt"))
 
-                    intervals.append(Time(interval[i], format='mjd', scale="tt"))
+                    intervals.append(Time(interval[i], format="mjd", scale="tt"))
                     # replace the final time of the first subrun to consider the residual
-                    if i == len(interval)-1:
-                        intervals.append(Time(tf, format='mjd', scale="tt"))
+                    if i == len(interval) - 1:
+                        intervals.append(Time(tf, format="mjd", scale="tt"))
 
-                time = [Time([tstart, tstop]) for tstart, tstop in zip(intervals[:-1], intervals[1:])]
+                time = [
+                    Time([tstart, tstop])
+                    for tstart, tstop in zip(intervals[:-1], intervals[1:])
+                ]
 
                 for i in time:
                     time_intervals.append(i)
@@ -345,18 +362,18 @@ def fraction_outside_interval(x, xmin, xmax):
     frac_sup = np.max(x) - xmax
     frac_inf = xmin - np.min(x)
     if frac_sup > 0 and frac_inf <= 0:
-        sup = (np.max(x)-xmax)/(np.max(x)-np.min(x))
+        sup = (np.max(x) - xmax) / (np.max(x) - np.min(x))
         inf = 0
     elif frac_inf > 0 and frac_sup <= 0:
-        inf = 1-(np.max(x)-xmin)/(np.max(x)-np.min(x))
+        inf = 1 - (np.max(x) - xmin) / (np.max(x) - np.min(x))
         sup = 0
     elif frac_inf > 0 and frac_sup > 0:
-        sup = (np.max(x)-xmax)/(np.max(x)-np.min(x))
-        inf = 1-(np.max(x)-xmin)/(np.max(x)-np.min(x))
+        sup = (np.max(x) - xmax) / (np.max(x) - np.min(x))
+        inf = 1 - (np.max(x) - xmin) / (np.max(x) - np.min(x))
     else:
         sup = 0
         inf = 0
-    return inf+sup
+    return inf + sup
 
 
 def weighted_average_error_calculation(errors, weights):
@@ -380,10 +397,10 @@ def weighted_average_error_calculation(errors, weights):
     """
     weights = np.array(weights)
     if np.sum(weights) != 1:
-        norm_weights = weights/np.sum(weights)
+        norm_weights = weights / np.sum(weights)
     else:
         norm_weights = weights
-    squared_weighted_average_error = np.sum((np.array(errors)*norm_weights)**2)
+    squared_weighted_average_error = np.sum((np.array(errors) * norm_weights) ** 2)
 
     return squared_weighted_average_error
 
@@ -407,14 +424,12 @@ def write_TRETS_fluxpoints(filename, flux_points, **kwargs):
                 f"[{v.unit.to_string()}]",
             )
         else:
-            header[f"{k}"] = (v)
+            header[f"{k}"] = v
     tab.meta.clear()
 
     fluxes = fits.BinTableHDU(tab, header=header, name="FLUXES")
 
-    hdulist = fits.HDUList(
-        [fits.PrimaryHDU(), fluxes]
-    )
+    hdulist = fits.HDUList([fits.PrimaryHDU(), fluxes])
     hdulist.writeto(filename, **kwargs)
 
 
@@ -438,20 +453,19 @@ def get_intervals_sum(start, stop, thd_sum, digit_res=5):
     sum_dt = sum_dt + dt[0]
     for i in range(1, len(dt)):
         # keep the value of start and stop of the interval when the sum is smaller than thd
-        if round((sum_dt + dt[i]).to_value(thd_sum.unit), digit_res) * thd_sum.unit > thd_sum:
+        if (
+            round((sum_dt + dt[i]).to_value(thd_sum.unit), digit_res) * thd_sum.unit
+            > thd_sum
+        ):
             arg_end = i - 1
-            intervals.append(
-                [start[arg_ini], stop[arg_end]]
-            )
+            intervals.append([start[arg_ini], stop[arg_end]])
             # restart
             arg_ini = i
             sum_dt = dt[i]
         else:
             sum_dt = sum_dt + dt[i]
 
-    intervals.append(
-        [start[arg_ini], stop[-1]]
-    )
+    intervals.append([start[arg_ini], stop[-1]])
     return intervals
 
 

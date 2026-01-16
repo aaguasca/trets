@@ -7,10 +7,11 @@ from .utils import (
     get_TRETS_table,
     get_TRETS_significance_threshold,
 )
+
 __all__ = [
     "temporal_resolution_hist",
     "significance_distribution",
-    "temporal_resolution_vs_sig"
+    "temporal_resolution_vs_sig",
 ]
 
 
@@ -40,11 +41,13 @@ def temporal_resolution_hist(ax, flux_points, temporal_units):
     mask_ul = mask_ul.reshape(-1)
 
     # flux points
-    time_array = (flux_points_tab["time_max"][~mask_ul] -
-                  flux_points_tab["time_min"][~mask_ul])*u.day
+    time_array = (
+        flux_points_tab["time_max"][~mask_ul] - flux_points_tab["time_min"][~mask_ul]
+    ) * u.day
     # UL
-    time_array_ul = (flux_points_tab["time_max"][mask_ul] -
-                     flux_points_tab["time_min"][mask_ul])*u.day
+    time_array_ul = (
+        flux_points_tab["time_max"][mask_ul] - flux_points_tab["time_min"][mask_ul]
+    ) * u.day
 
     time_array = time_array.to_value(temporal_units)
     n = ax.hist(time_array, bins=50, label="Flux point")
@@ -81,7 +84,7 @@ def significance_distribution(ax, flux_points):
 
     mask_ul = flux_points_tab["is_ul"].value is True
     mask_ul = mask_ul.reshape(-1)
-    x = (flux_points_tab["time_max"]+flux_points_tab["time_min"])/2
+    x = (flux_points_tab["time_max"] + flux_points_tab["time_min"]) / 2
 
     plt.plot(x, flux_points_tab["sig_detection"], "o", label="Flux point")
     plt.plot(x[mask_ul], flux_points_tab["sig_detection"][mask_ul], "o", label="UL")
@@ -123,16 +126,11 @@ def temporal_resolution_vs_sig(ax, list_tab, temporal_units):
     list_t_bins = []
     for tab in list_tab:
         list_t_bins.append(
-            ((tab["time_max"]-tab["time_min"]).value*u.d).to_value(temporal_units)
+            ((tab["time_max"] - tab["time_min"]).value * u.d).to_value(temporal_units)
         )
         list_sig_detection.append(tab.meta["SIG-THD"])
 
-    ax.boxplot(
-        list_t_bins,
-        positions=list_sig_detection,
-        whis=[5, 95],
-        sym=""
-    )
+    ax.boxplot(list_t_bins, positions=list_sig_detection, whis=[5, 95], sym="")
 
     ax.set_xlabel(r"Detection statistical significance [$\sigma$]")
     ax.set_ylabel(r"Median time-bin distribution [{}]".format(temporal_units))

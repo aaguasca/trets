@@ -2,29 +2,41 @@ import astropy.units as u
 import numpy as np
 import pytest
 from trets.utils import (
-    get_intervals, fraction_outside_interval, weighted_average_error_calculation,
-    get_intervals_sum, split_data_from_intervals
+    get_intervals,
+    fraction_outside_interval,
+    weighted_average_error_calculation,
+    get_intervals_sum,
+    split_data_from_intervals,
 )
+
 
 @pytest.fixture
 def data():
     return np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
+
 @pytest.mark.parametrize(
     "n, expected_output",
-    [(2, np.array([1, 3, 5, 7, 9, 10])), (3, np.array([1, 4, 7, 10])), (4, np.array([1, 5, 9, 10]))]
+    [
+        (2, np.array([1, 3, 5, 7, 9, 10])),
+        (3, np.array([1, 4, 7, 10])),
+        (4, np.array([1, 5, 9, 10])),
+    ],
 )
 def test_get_intervals(data, n, expected_output):
     selected_data = get_intervals(data, n)
     assert np.array_equal(selected_data, expected_output)
 
+
 def test_get_intervals_output_type(data):
     selected_data = get_intervals(data, 2)
     assert isinstance(selected_data, np.ndarray)
 
+
 def test_get_intervals_last_element(data):
     selected_data = get_intervals(data, 2)
     assert selected_data[-1] == data[-1]
+
 
 def test_fraction_outside_interval():
     x = [0, 10]
@@ -90,8 +102,12 @@ def test_get_intervals_sum():
     intervals = get_intervals_sum(start, stop, thd_sum)
 
     expected_intervals = [
-        [1 * u.s, 9 * u.s], [12 * u.s, 26 * u.s], [31 * u.s, 36 * u.s],
-        [40 * u.s, 51 * u.s], [52 * u.s, 53 * u.s], [60 * u.s, 70 * u.s]
+        [1 * u.s, 9 * u.s],
+        [12 * u.s, 26 * u.s],
+        [31 * u.s, 36 * u.s],
+        [40 * u.s, 51 * u.s],
+        [52 * u.s, 53 * u.s],
+        [60 * u.s, 70 * u.s],
     ]
 
     assert intervals == expected_intervals

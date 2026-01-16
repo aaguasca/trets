@@ -1,21 +1,11 @@
 #!/usr/bin/env python
 # Licensed under a 3-clause BSD style license - see LICENSE
 
-from ..utils import (
-    subrun_split,
-    get_intervals_sum,
-    split_data_from_intervals
-)
+from ..utils import subrun_split, get_intervals_sum, split_data_from_intervals
 import numpy as np
-from astropy.time import (
-    Time
-)
-from gammapy.makers import (
-    SpectrumDatasetMaker
-)
-from gammapy.maps import (
-    RegionGeom
-)
+from astropy.time import Time
+from gammapy.makers import SpectrumDatasetMaker
+from gammapy.maps import RegionGeom
 from gammapy.datasets import (
     Datasets,
     SpectrumDataset,
@@ -24,7 +14,7 @@ from gammapy.estimators import (
     LightCurveEstimator,
 )
 
-__all__ = ['intrarun']
+__all__ = ["intrarun"]
 
 
 def intrarun(
@@ -37,9 +27,8 @@ def intrarun(
     observations,
     bkg_maker_reflected,
     best_fit_spec_model,
-    time_bin=None
+    time_bin=None,
 ):
-
     """
     Compute the integral fluxes using subrun events.
 
@@ -76,13 +65,12 @@ def intrarun(
         geom = RegionGeom.create(region=on_region, axes=[e_reco])
 
         # create the dataset container object of the spectrum on the ON region
-        dataset_empty = SpectrumDataset.create(
-            geom, energy_axis_true=e_true
-        )
+        dataset_empty = SpectrumDataset.create(geom, energy_axis_true=e_true)
 
         # maker to produce data reduction to DL4
         dataset_maker = SpectrumDatasetMaker(
-            containment_correction=False, selection=["counts", "exposure", "edisp"]  # make this maps
+            containment_correction=False,
+            selection=["counts", "exposure", "edisp"],  # make this maps
         )
 
     # prepare again the Dataset
@@ -96,10 +84,12 @@ def intrarun(
             for run in range(len(observations)):
                 time_interval_obs.append(
                     Time(
-                        [observations[run].events.observation_time_start.tt.mjd,
-                         observations[run].events.observation_time_stop.tt.mjd],
+                        [
+                            observations[run].events.observation_time_start.tt.mjd,
+                            observations[run].events.observation_time_stop.tt.mjd,
+                        ],
                         format="mjd",
-                        scale="tt"
+                        scale="tt",
                     )
                 )
 
@@ -112,12 +102,11 @@ def intrarun(
         else:
             gti_time_start_obs = observations.gti.time_start
             gti_time_stop_obs = observations.gti.time_stop
-            time_intervals = get_intervals_sum(gti_time_start_obs, gti_time_stop_obs, time_bin)
+            time_intervals = get_intervals_sum(
+                gti_time_start_obs, gti_time_stop_obs, time_bin
+            )
             observations_sets = split_data_from_intervals(
-                observations,
-                time_intervals,
-                gti_time_start_obs,
-                gti_time_stop_obs
+                observations, time_intervals, gti_time_start_obs, gti_time_stop_obs
             )
             print(len(observations_sets))
 
@@ -138,7 +127,9 @@ def intrarun(
     for obs_id, observation in zip(np.arange(len(time_intervals)), short_observations):
 
         if not is_DL4:
-            dataset = dataset_maker.run(dataset_empty.copy(name=str(obs_id)), observation)
+            dataset = dataset_maker.run(
+                dataset_empty.copy(name=str(obs_id)), observation
+            )
             dataset_on_off = bkg_maker_reflected.run(dataset, observation)
         # No need to do the DL3->DL4 stage
         else:
@@ -156,18 +147,18 @@ def intrarun(
         lc_subrun = LightCurveEstimator(
             energy_edges=[E1, E2],
             reoptimize=False,
-            selection_optional='all',
+            selection_optional="all",
             n_sigma=1,
             n_sigma_ul=2,
-            time_intervals=time_intervals
+            time_intervals=time_intervals,
         )
     else:
         lc_subrun = LightCurveEstimator(
             energy_edges=[E1, E2],
             reoptimize=False,
-            selection_optional='all',
+            selection_optional="all",
             n_sigma=1,
-            n_sigma_ul=2
+            n_sigma_ul=2,
         )
 
     # run the estimator using all the data
