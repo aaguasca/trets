@@ -52,7 +52,7 @@ def intrarun(
         in e_reco.
     E2: astropy.Units
         Maximum energy bound used to compute the integral flux. It must be considered with one center
-        in e_reco.       
+        in e_reco.
     e_reco:
         Reconstructed energy axis used in the SpectrumDatasetOnOff object
     e_true:
@@ -69,7 +69,7 @@ def intrarun(
     Returns
     -------
     lc_subrun: LightCurve
-        Light curve object.    
+        Light curve object.
     """
 
     if not is_DL4:
@@ -90,7 +90,7 @@ def intrarun(
 
     if time_bin is not None:
 
-        #data at DL3
+        # data at DL3
         if not is_DL4:
             time_interval_obs = []
             for run in range(len(observations)):
@@ -108,7 +108,7 @@ def intrarun(
             # divide the runs into different subruns
             short_observations = observations.select_time(time_intervals)
 
-        #data at DL4
+        # data at DL4
         else:
             gti_time_start_obs = observations.gti.time_start
             gti_time_stop_obs = observations.gti.time_stop

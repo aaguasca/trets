@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # Licensed under a 3-clause BSD style license - see LICENSE
-import astropy.units
 from astropy.time import Time
 import astropy.units as u
 from astropy.io import fits
@@ -48,12 +47,13 @@ def del_asymmetric_errors(flux_points):
     fluxpoints.meta = meta_TRETS
     return fluxpoints
 
+
 def get_intervals(data, n):
     """
     Return the values whose arg satisfies that it is a
     multiple of n. The value in the last position is also
     returned.
-    
+
     Parameters
     ----------
     data: np.array
@@ -73,11 +73,12 @@ def get_intervals(data, n):
         data = np.array(data)
         if len(np.shape(data)) != 1:
             raise ValueError("data has more than one dimension")
-            
+
     selected_data = data[::n]
     if (len(data)-1) % n != 0:
         selected_data = np.concatenate((selected_data, [data[-1]]))
     return selected_data
+
 
 def get_TRETS_table(flux_points):
     """
@@ -93,6 +94,7 @@ def get_TRETS_table(flux_points):
     tab.meta = meta
     return tab
 
+
 def get_TRETS_significance_threshold(flux_points):
     """
     Obtain the significance threshold used to compute TRETS
@@ -101,6 +103,7 @@ def get_TRETS_significance_threshold(flux_points):
     if "sig-thd" in flux_points.meta.keys():
         return flux_points.meta["sig-thd"]
 
+
 def get_TRETS_flux_significance(flux_points):
     """
     Obtain the significance detection for each time bin used to
@@ -108,6 +111,7 @@ def get_TRETS_flux_significance(flux_points):
     """
     if "sig_detection" in flux_points.meta.keys():
         return flux_points.meta["sig_detection"]
+
 
 def get_TRETS_binIterator(flux_points):
     """
@@ -120,6 +124,7 @@ def get_TRETS_binIterator(flux_points):
         if "method" in k:
             return flux_points.meta[k]
 
+
 def get_TRETS_flux_significance_thd(flux_points):
     """
     Obtain the flux significance threshold used to compute TRETS
@@ -127,6 +132,7 @@ def get_TRETS_flux_significance_thd(flux_points):
     """
     if "sig-flux-thd" in flux_points.meta.keys():
         return flux_points.meta["sig-flux-thd"]
+
 
 def conditional_ray(attr):
     """
@@ -226,7 +232,7 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
     Obtain the time intervals required to divide a run into subruns with a gti of interval_subrun,
     intervals in the extremes of the run account the extra or infra-time of the run to obtain an
     integer number of subruns.
-        
+
     Parameters
     ----------
     interval_subrun: astropy.Quantity
@@ -239,8 +245,8 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
     Returns
     -------
     time_intervals: list
-        list of [tstart,tstop] of each subrun.   
-        
+        list of [tstart,tstop] of each subrun.
+
     """
 
     time_intervals = []
@@ -255,7 +261,7 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
 
         if sections < 1:
             time_intervals.append(Time([t0, tf], format="mjd", scale="tt"))
-        else:            
+        else:
             if round(sections)-round(sections, int(-math.log10(atol))) == 0:
                 ti = t0+interval_subrun.to_value("d")
                 t_end = tf-interval_subrun.to_value("d")
@@ -276,7 +282,7 @@ def subrun_split(interval_subrun, time_interval_obs, atol=1e-6):
                     # select the time that correspond to the end of the last subrun if we add half of the
                     # residual to this run
                     t_end = tf-interval_subrun.to_value("d")*(1+abs(int(sections)-sections)/2)
-            
+
             # obtain the initial and final time of subruns with the same time interval as "interval_subrun"
             if int(sections) == 1:  # for values 1<sections<2
                 interval = np.linspace(ti, t_end, 1)
@@ -352,20 +358,21 @@ def fraction_outside_interval(x, xmin, xmax):
         inf = 0
     return inf+sup
 
+
 def weighted_average_error_calculation(errors, weights):
     """
     Compute the squared error of the weighted average
     through error propagation of each term.
 
-    \delta_E = (w_1\delta a_1)**2 + (w_2\delta a_2)**2 + ...
-    
+    \\delta_E = (w_1\\delta a_1)**2 + (w_2\\delta a_2)**2 + ...
+
     Parameters
     ----------
     errors:
         Intrinsic errors of each measurement.
     weights:
         Weighted value for each measurement.
-        
+
     Returns
     -------
     squared_weighted_average_error:
@@ -377,7 +384,7 @@ def weighted_average_error_calculation(errors, weights):
     else:
         norm_weights = weights
     squared_weighted_average_error = np.sum((np.array(errors)*norm_weights)**2)
-    
+
     return squared_weighted_average_error
 
 
@@ -413,7 +420,9 @@ def write_TRETS_fluxpoints(filename, flux_points, **kwargs):
 
 def get_intervals_sum(start, stop, thd_sum, digit_res=5):
     """
-    always keep the minimum time interval checking the next dataset
+    Get the time start and stop of time intervals that have
+    a time interval smaller than thd_sum. The function checks
+    the time interval of the next dataset.
     """
 
     if isinstance(thd_sum, u.Quantity):
@@ -428,7 +437,7 @@ def get_intervals_sum(start, stop, thd_sum, digit_res=5):
 
     sum_dt = sum_dt + dt[0]
     for i in range(1, len(dt)):
-        # keep the value of start and stop of the interval where the sum is smaller than thd
+        # keep the value of start and stop of the interval when the sum is smaller than thd
         if round((sum_dt + dt[i]).to_value(thd_sum.unit), digit_res) * thd_sum.unit > thd_sum:
             arg_end = i - 1
             intervals.append(
@@ -436,7 +445,6 @@ def get_intervals_sum(start, stop, thd_sum, digit_res=5):
             )
             # restart
             arg_ini = i
-            min_coef = 0
             sum_dt = dt[i]
         else:
             sum_dt = sum_dt + dt[i]
@@ -444,7 +452,6 @@ def get_intervals_sum(start, stop, thd_sum, digit_res=5):
     intervals.append(
         [start[arg_ini], stop[-1]]
     )
-
     return intervals
 
 
@@ -461,18 +468,18 @@ def split_data_from_intervals(data, intervals, start, stop):
         list of lists with the first index the start
         and the second index the stop of the interval.
     start:
-        The values of the start of the data
+        Array with the values of the start of the data
     stop:
-        The values of the stop of the data
+        Array with the values of the stop of the data
     """
     split_data = []
     for i, (ini, end) in enumerate(intervals):
         arg_i = np.argwhere(start == ini)[0, 0]
-        arg_e = np.argwhere(stop == end)[0, 0]
+        arg_e = np.argwhere(stop == end)[0, 0] + 1
 
         if arg_i == 0:
             arg_i = None
-        if arg_e == len(start) - 1 and i == len(intervals) - 1:
+        if arg_e == len(start) and i == len(intervals) - 1:
             arg_e = None
 
         split_data.append(data[arg_i:arg_e])

@@ -3,7 +3,6 @@
 
 import matplotlib.pyplot as plt
 import astropy.units as u
-import numpy as np
 from .utils import (
     get_TRETS_table,
     get_TRETS_significance_threshold,
@@ -17,7 +16,7 @@ __all__ = [
 
 def temporal_resolution_hist(ax, flux_points, temporal_units):
     """
-    Plot the histogram of the time bins of the fluxes in the
+    Plot the histogram of the time bins of the fluxes from the
     flux container flux_points.
 
     Parameters
@@ -37,14 +36,14 @@ def temporal_resolution_hist(ax, flux_points, temporal_units):
     """
 
     flux_points_tab = flux_points.to_table(sed_type="flux", format="lightcurve")
-    mask_ul = flux_points_tab["is_ul"].value == True
+    mask_ul = flux_points_tab["is_ul"].value is True
     mask_ul = mask_ul.reshape(-1)
 
     # flux points
-    time_array = (flux_points_tab["time_max"][~mask_ul]- \
+    time_array = (flux_points_tab["time_max"][~mask_ul] -
                   flux_points_tab["time_min"][~mask_ul])*u.day
     # UL
-    time_array_ul = (flux_points_tab["time_max"][mask_ul]- \
+    time_array_ul = (flux_points_tab["time_max"][mask_ul] -
                      flux_points_tab["time_min"][mask_ul])*u.day
 
     time_array = time_array.to_value(temporal_units)
@@ -60,7 +59,7 @@ def temporal_resolution_hist(ax, flux_points, temporal_units):
 
 def significance_distribution(ax, flux_points):
     """
-    Plot the significance of the fluxes of the flux container 
+    Plot the significance of the fluxes of the flux container
     flux_points as a function of time.
 
     Parameters
@@ -80,7 +79,7 @@ def significance_distribution(ax, flux_points):
     flux_points_tab = get_TRETS_table(flux_points)
     sig_thd = get_TRETS_significance_threshold(flux_points)
 
-    mask_ul = flux_points_tab["is_ul"].value == True
+    mask_ul = flux_points_tab["is_ul"].value is True
     mask_ul = mask_ul.reshape(-1)
     x = (flux_points_tab["time_max"]+flux_points_tab["time_min"])/2
 
@@ -100,14 +99,14 @@ def temporal_resolution_vs_sig(ax, list_tab, temporal_units):
     """
     Plot the median value of the temporal resolution histogram
     as a function of the detection significance threshold.
-    By default, edges do the boxes delimiters the range between 
+    By default, edges of the boxes delimiters the range between
     the 25th and 75th interpercentile, and the error bars delimiters
     the 5th to 95th interpercentile range.
 
     Parameters
     ----------
     ax:
-        Axis    
+        Axis
     list_tab: list
         List with the table of flux points for different source detection
         significance thresholds.
@@ -127,7 +126,7 @@ def temporal_resolution_vs_sig(ax, list_tab, temporal_units):
             ((tab["time_max"]-tab["time_min"]).value*u.d).to_value(temporal_units)
         )
         list_sig_detection.append(tab.meta["SIG-THD"])
-    
+
     ax.boxplot(
         list_t_bins,
         positions=list_sig_detection,
@@ -136,6 +135,6 @@ def temporal_resolution_vs_sig(ax, list_tab, temporal_units):
     )
 
     ax.set_xlabel(r"Detection statistical significance [$\sigma$]")
-    ax.set_ylabel(r"Median time-bin distribution [{}]".format(temporal_units))   
+    ax.set_ylabel(r"Median time-bin distribution [{}]".format(temporal_units))
 
-    return ax    
+    return ax

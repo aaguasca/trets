@@ -4,7 +4,7 @@
 import numpy as np
 from scipy.stats import norm
 import math
-from math import factorial 
+from math import factorial
 import warnings
 from scipy.special import loggamma
 
@@ -19,33 +19,33 @@ class BayesianProbability:
     an observation with n_on events in the ON region, n_off events in the off region and a ratio
     between the integrated acceptance of the telescope in the ON/OFF regions, it can be produced
     for a source with an expected signal (mu_s).
-    
-    The results for high values of n_on and n_off may not be reliable. Everything is fine at least if 
+
+    The results for high values of n_on and n_off may not be reliable. Everything is fine at least if
     n_on < 110 and n_off<110, when an exact solution is given. Afterwards, who knows :). Thus, please,
     use this method with few events.
-    
+
     The probability that there is a source in the ON/OFF observations is also included.
     """
-    
+
     def __init__(self, n_on, n_off, alpha):
         self.n_on = n_on
         self.n_off = n_off
         self.alpha = alpha
-        
+
     def _factorial(self, number):
         """
         Compute the factorial of number.
-        
+
         Parameters
         ----------
         number: int
             Number to compute the factorial of it.
-            
+
         Returns
         -------
         fact: int
             Factorial value of number.
-            
+
         """
 
         fact = factorial(number)
@@ -55,7 +55,7 @@ class BayesianProbability:
     def _eq_denominator(self):
         """
         Compute the denominator of the expansion of the normalized binomial expansion. i.e.
-        the normalization factor necessary in order to have $\sum{C_i}_{i}^{n_on}=1$.
+        the normalization factor necessary in order to have $\\sum{C_i}_{i}^{n_on}=1$.
 
         Returns
         -------
@@ -85,110 +85,110 @@ class BayesianProbability:
         """
         Probability mass function of a Poissonian distribution. Faster than scipy.stats.poisson
         if the loop to compute poission_dist < 50 events.
-        
+
         Parameters
         ----------
         _lambda: float
             Expected value
         n: int
             Number of occurrences.
-            
+
         Returns
         -------
         Probability mass function given _lambda and n.
-        
+
         """
         return ((_lambda**n)/(self._factorial(n)))*math.exp(-_lambda)
 
     def _normalized_coeff_binomial_expansion(self, event_i):
         """
         Probability that n - {i} events are background events.
-                
+
         Parameters
         ----------
-        event_i : int 
+        event_i : int
             i-th considered event.
-           
+
         Returns
         -------
         C_i : int
             The normalized coefficient for the i-th ON event. i.e. the probability for the
             n - {i} events are background events.
-        
+
         """
 
         # compute denominator
         denominator = self._eq_denominator()
-    
+
         # compute numerator
         if self.n_on > 110 or self.n_off > 110:
             warnings.warn("Warning: The value may not be precise! We are dealing with huge values")
-    
+
             alpha_term = round(1+self.alpha**(-1))
             first_term = (alpha_term**event_i)
             second_term = (self._factorial(self.n_on+self.n_off-event_i)//self._factorial(self.n_on-event_i))
             numerator = first_term*second_term
-            
+
             C = numerator/denominator
-            
+
         else:
             alpha_term = 1+self.alpha**(-1)
             first_term = (alpha_term**event_i)
             second_term = (self._factorial(self.n_on+self.n_off-event_i)/self._factorial(self.n_on-event_i))
             numerator = first_term*second_term
-            
+
             C = numerator/denominator
-        
+
         return C
 
     def _log_normalized_0_coeff_binomial_expansion(self):
         """
         Log Probability that n events are background events.
-           
+
         Returns
         -------
         C_0 : int
             The normalized coefficient for the 0-th ON event. i.e. the probability for the
             n events to be background events.
-        
+
         """
 
         # compute denominator
         denominator = math.log(self._eq_denominator())
-    
+
         # compute numerator
         if self.n_on > 110 or self.n_off > 110:
             warnings.warn("Warning: The value may not be precise! We are dealing with huge values")
-    
+
             first_term = loggamma(self.n_on+self.n_off+1)
             second_term = loggamma(self.n_on+1)
             numerator = first_term-second_term
-            
+
             C = numerator-denominator
-            
+
         else:
             first_term = loggamma(self.n_on+self.n_off+1)
             second_term = loggamma(self.n_on+1)
             numerator = first_term-second_term
-            
+
             C = numerator-denominator
-        
-        return C    
-    
+
+        return C
+
     def posterior_proba(self, mu_s):
         """
         Compute the posterior probability for a source with an expected signal of mu_s.
-        
+
         Parameters
         ----------
         mu_s: float
             Expected signal of the source.
-            
+
         Returns
         -------
         proba: float
             Posterior probability
-        
+
         """
         event_i = np.arange(self.n_on+1, dtype=int)
         self.proba = []
@@ -203,8 +203,8 @@ class BayesianProbability:
                     self.proba.append(C*poss)
         else:
             if mu_s == 0:
-                #C = self._normalized_coeff_binomial_expansion(event_i=0)
-                #self.proba = np.array(C)
+                # C = self._normalized_coeff_binomial_expansion(event_i=0)
+                # self.proba = np.array(C)
                 C = self._log_normalized_0_coeff_binomial_expansion()
                 self.proba = np.exp(np.array(C))
             else:
@@ -215,15 +215,15 @@ class BayesianProbability:
 
         self.proba = np.array(self.proba)
         return self.proba.sum()
-    
+
     def detection_significance(self):
         """
         Compute the detection significance. i.e. how confidence we are (probability)
         that the data departs from an only background data (mu_s=0)
-        
+
         Parameters
         ----------
-        
+
         Returns
         -------
         significance: float
@@ -232,23 +232,23 @@ class BayesianProbability:
         detection_proba = self.posterior_proba(0)
         significance = self.proba_to_sigma(detection_proba)
         return significance
-    
+
     def proba_to_sigma(self, proba):
         """
         Conversion from probability to Gaussian standard deviations.
-        
+
         Parameters
         ----------
         proba: float
             Probability.
-        
+
         Returns
         -------
         sigma: float
             Gaussian standard deviations.
-        
+
         """
         sigma = norm.isf(0.5*proba)
         # sigma = norm.ppf(1-proba * 0.5 )
         return sigma
-    
+

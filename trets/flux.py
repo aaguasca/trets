@@ -22,7 +22,7 @@ from gammapy.estimators import (
 __all__ = [
     "lightcurve_methods",
     "weight_fluxes"
-]    
+]
 
 
 class lightcurve_methods:
@@ -30,7 +30,7 @@ class lightcurve_methods:
     Two ways to obtain a light curve:
     - Using a fixed statistical significance of the source (TRETS)
     - Using a fixed time interval (intrarun and runwise light curve)
-    
+
     Three methods to obtain a light curve:
     - TRETS
     - intrarun
@@ -45,16 +45,16 @@ class lightcurve_methods:
         # if the dataset are already binned (simulations or DL4 real data)
         self.is_DL4 = is_DL4
 
-        #TODO: Allow the return the dictionary with the keys required to run the method (option)
-        #TODO: Create method that reads the returned dictionary after instantiate the class
+        # TODO: Allow the return the dictionary with the keys required to run the method (option)
+        # TODO: Create method that reads the returned dictionary after instantiate the class
         allowed_keys = self._allowed_keys_script()
         self.__dict__.update((key, value) for key, value in kwargs.items() if key in allowed_keys)
 
-        #TODO: move these checks to the methods
+        # TODO: move these checks to the methods
         if not is_DL4:
-            print(self.e_inf_flux.to(self.e_reco.edges.unit).value,self.e_reco.edges.value)
-            assert round(self.e_inf_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
-            assert round(self.e_sup_flux.to(self.e_reco.edges.unit).value,3) in np.around(self.e_reco.edges.value,3)
+            print(self.e_inf_flux.to(self.e_reco.edges.unit).value, self.e_reco.edges.value)
+            assert round(self.e_inf_flux.to(self.e_reco.edges.unit).value, 3) in np.around(self.e_reco.edges.value, 3)
+            assert round(self.e_sup_flux.to(self.e_reco.edges.unit).value, 3) in np.around(self.e_reco.edges.value, 3)
 
             if self.script_name == "TRETS":
                 assert len(self.e_reco.center) == 3
@@ -62,8 +62,8 @@ class lightcurve_methods:
     def _allowed_keys_script(self):
         """
         Allowed keys for each method
-        """  
-        
+        """
+
         if self.script_name == "TRETS":
             allowed_keys = {
                 "e_inf_flux",                 # Minimum energy bound used to compute the integral flux.
@@ -83,7 +83,7 @@ class lightcurve_methods:
                 "parallelization",            # Boolean to use parallelization or not
                 "bool_eventbin_iterate"       # Boolean to use event-fixed or time-fixed intervals
             }
-            
+
         if self.script_name == "intrarun":
             allowed_keys = {
                 "e_inf_flux",                 # ""
@@ -96,7 +96,7 @@ class lightcurve_methods:
                 "bkg_maker_reflected",        # ""
                 "sky_model"                   # ""
             }
-            
+
         if self.script_name == "runwise":
             allowed_keys = {
                 "e_inf_flux",                 # ""
@@ -121,14 +121,14 @@ class lightcurve_methods:
 
             for key in del_noDL4_keys:
                 allowed_keys.remove(key)
-            
-        return allowed_keys            
-            
+
+        return allowed_keys
+
     def run(self):
         """
         Run the light curve methods
         """
-        
+
         t_start = time.time()
         if self.script_name == "TRETS":
 
@@ -153,7 +153,7 @@ class lightcurve_methods:
                             parallelization=self.is_ray,
                             bool_eventbin_iterate=self.bool_eventbin_iterate
                         )
-                        #Following: https://stackoverflow.com/a/52903322
+                        # Following: https://stackoverflow.com/a/52903322
                         futures = parallelization_TRETS.TRETS_algorithm().remote(
                             parallelization_TRETS,
                             is_DL4=self.is_DL4,
@@ -177,7 +177,7 @@ class lightcurve_methods:
                             parallelization=self.is_ray,
                             bool_eventbin_iterate=False
                         )
-                        #Following: https://stackoverflow.com/a/52903322
+                        # Following: https://stackoverflow.com/a/52903322
                         futures = parallelization_TRETS.TRETS_algorithm().remote(
                             parallelization_TRETS,
                             is_DL4=self.is_DL4,
@@ -197,7 +197,7 @@ class lightcurve_methods:
                             bool_bayesian=self.bool_bayesian
                         )
                     futures_list.append(futures)
-            
+
                 light_curve = []
                 sig_column = []
                 for futures in futures_list:
@@ -277,7 +277,7 @@ class lightcurve_methods:
                     format="lightcurve"
                 )
 
-            # TRETS parallelization with multiprocessing  
+            # TRETS parallelization with multiprocessing
             # (NO FUNCIONA, crec que pq ja utilitzo pool dins un altre cop)
 #             if __name__ == '__main__':
 #                 import contextlib
@@ -287,7 +287,7 @@ class lightcurve_methods:
 #                     light_curve=vstack(light_curve)
 #                     light_curve=LightCurve(light_curve)
 #                 p.join()
-    
+
         if self.script_name == "intrarun":
             if not self.is_DL4:
                 light_curve = intrarun(
@@ -348,16 +348,16 @@ class lightcurve_methods:
 
 def weight_fluxes(fluxes_to_weight, reference_fluxes):
     """
-    Weight 
-    
+    Weight
+
     Parameters
     ----------
     fluxes_to_weight:
-        Table with fluxes to weight using the same time bin as the one is 
+        Table with fluxes to weight using the same time bin as the one is
         use for the reference_fluxes
     reference_fluxes:
         Table with the fluxes we want to compare with fluxes_to_weight
-    
+
     Returns
     -------
     list_averange_flux: list
@@ -373,7 +373,7 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
     ref_center_time: list
         List with the central time value of the time bin of the reference fluxes.
     """
-    
+
     list_averange_flux = []
     lst_std_flux = []
     ref_flux = []
@@ -389,7 +389,7 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
         weight_ul = []
 
         for w_flux in fluxes_to_weight:
-            
+
             # flux to weight inside the time interval of the reference flux
             if round(w_flux["time_min"], 9) >= round(flux["time_min"], 9) and \
                     round(w_flux["time_max"], 9) <= round(flux["time_max"], 9):
@@ -400,7 +400,7 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
                         int_flux.append(w_flux["flux"][0])
                         int_errflux.append(w_flux["flux_err"][0])
                         weight_ul.append(1)
-                        
+
                     # UL
                     else:
                         int_flux.append(w_flux["flux_ul"][0])
@@ -408,17 +408,17 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
                         weight_ul.append(1+fluxes_to_weight.meta["sig-THD"]-w_flux["sig_detection"])
 
                 # fixed time interval flux
-                else:     
+                else:
                     if w_flux["sqrt_ts"][0] > 2:
                         int_flux.append(w_flux["flux"][0])
                         int_errflux.append(w_flux["flux_err"][0])
-                        weight_ul.append(1)      
+                        weight_ul.append(1)
                     # UL
                     else:
                         int_flux.append(w_flux["flux_ul"][0])
                         int_errflux.append(0.5*w_flux["flux_ul"][0])
                         weight_ul.append(1+4-w_flux["ts"][0])
-                        
+
                 int_time.append(w_flux["time_max"]-w_flux["time_min"])
                 time_flux.append(w_flux["time_max"])
                 time_flux.append(w_flux["time_min"])
@@ -441,30 +441,30 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
                     if w_flux["sig_detection"] >= fluxes_to_weight.meta["sig-THD"]:
                         int_flux.append(w_flux["flux"][0])
                         int_errflux.append(w_flux["flux_err"][0])
-                        weight_ul.append(1)  
+                        weight_ul.append(1)
                     # UL
                     else:
                         int_flux.append(w_flux["flux_ul"][0])
                         int_errflux.append(0.5*w_flux["flux_ul"][0])
-                        weight_ul.append(1+fluxes_to_weight.meta["sig-THD"]-w_flux["sig_detection"])   
-                        
+                        weight_ul.append(1+fluxes_to_weight.meta["sig-THD"]-w_flux["sig_detection"])
+
                 # fixed time interval flux
-                else:            
+                else:
                     if w_flux["sqrt_ts"][0] > 2:
                         int_flux.append(w_flux["flux"][0])
                         int_errflux.append(w_flux["flux_err"][0])
                         weight_ul.append(1)
                     # UL
-                    else:                               
+                    else:
                         int_flux.append(w_flux["flux_ul"][0])
                         int_errflux.append(0.5*w_flux["flux_ul"][0])
-                        weight_ul.append(1+4-w_flux["ts"][0])  
-                        
+                        weight_ul.append(1+4-w_flux["ts"][0])
+
                 int_time.append(w_flux["time_max"]-w_flux["time_min"])
                 time_flux.append(w_flux["time_max"])
                 time_flux.append(w_flux["time_min"])
                 # not all the flux is inside the reference flux
-                weight_tinside.append(1-t_out)                        
+                weight_tinside.append(1-t_out)
 
             # ends inside the time bin of the refence flux but starts before the reference flux
             if round(w_flux["time_max"], 9) >= round(flux["time_min"], 9) and \
@@ -482,13 +482,13 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
                     if w_flux["sig_detection"] >= fluxes_to_weight.meta["sig-THD"]:
                         int_flux.append(w_flux["flux"][0])
                         int_errflux.append(w_flux["flux_err"][0])
-                        weight_ul.append(1)   
+                        weight_ul.append(1)
                     # UL
                     else:
                         int_flux.append(w_flux["flux_ul"][0])
                         int_errflux.append(0.5*w_flux["flux_ul"][0])
                         weight_ul.append(1+fluxes_to_weight.meta["sig-THD"]-w_flux["sig_detection"])
-                        
+
                 # fixed time interval flux
                 else:
                     if w_flux["sqrt_ts"][0] > 2:
@@ -496,16 +496,16 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
                         int_errflux.append(w_flux["flux_err"][0])
                         weight_ul.append(1)
                     # UL
-                    else:    
+                    else:
                         int_flux.append(w_flux["flux_ul"][0])
                         int_errflux.append(0.5*w_flux["flux_ul"][0])
                         weight_ul.append(1+4-w_flux["ts"][0])
-                        
+
                 int_time.append(w_flux["time_max"]-w_flux["time_min"])
                 time_flux.append(w_flux["time_max"])
                 time_flux.append(w_flux["time_min"])
                 # not all the flux is inside the reference flux
-                weight_tinside.append(1-t_out)                        
+                weight_tinside.append(1-t_out)
 
         int_time = np.array(int_time)
         int_flux = np.array(int_flux)
@@ -514,6 +514,7 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
         if len(int_time) != 0:
             # weighted as the 1/variance
             # weights=(1/np.array(int_errflux)**2)
+            # weighted as the 1/variance and fraction inside
             weights = (1/np.array(int_errflux)**2)*(np.array(weight_tinside)/np.array(weight_ul))
 
             flux_weighted_av = np.average(int_flux, weights=weights)
@@ -534,8 +535,8 @@ def weight_fluxes(fluxes_to_weight, reference_fluxes):
             ref_flux.append(flux["flux"][0])
             ref_errflux.append(flux["flux_err"][0])
             ref_center_time.append((flux["time_min"]+flux["time_max"])/2)
-            
+
         else:
             print("no fluxes in time bin [{},{}] MJD".format(flux["time_min"], flux["time_min"]))
-            
+
     return list_averange_flux, lst_std_flux, center_time, ref_flux, ref_errflux, ref_center_time
