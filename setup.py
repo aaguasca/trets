@@ -9,5 +9,5 @@ setup(
     version=VERSION,
     author="Arnau Aguasca-Cabot",
     author_email="<arnau.aguasca@fqa.ub.edu>",
-    packages=find_packages()
+    packages=find_packages(),
 )
